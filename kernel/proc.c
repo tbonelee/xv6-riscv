@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 #include "pstat.h"
+#include "rand.h"
 
 struct cpu cpus[NCPU];
 
@@ -469,27 +470,52 @@ scheduler(void)
     intr_on();
     intr_off();
 
-    int found = 0;
-    for(p = proc; p < &proc[NPROC]; p++) {
+    int tickets_for_runnable[NPROC];
+
+    int total_tickets = 0;
+    for(int i = 0; i < NPROC; i++) {
+      p = &proc[i];
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
-
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
+        total_tickets += p->tickets;
+        tickets_for_runnable[i] = p->tickets;
+      } else {
+        tickets_for_runnable[i] = 0;
       }
       release(&p->lock);
     }
-    if(found == 0) {
+
+    if(total_tickets == 0) {
       // nothing to run; stop running on this core until an interrupt.
       asm volatile("wfi");
+      continue;
+    }
+
+    int random_number = getrandom(0, total_tickets);
+    int current_ticket = 0;
+    for(int i = 0; i < NPROC; i++) {
+      p = &proc[i];
+      current_ticket += tickets_for_runnable[i];
+      if (p->state == RUNNABLE && current_ticket >= random_number) {
+        acquire(&p->lock);
+        // 멀티 프로세서일 때 티켓수를 sum할 때 RUNNABLE이었던 프로세스가
+        // 실제 프로세스 선택 시에 RUNNABLE이 아닐 수 있는 경우를 고려..?
+        if (p->state == RUNNABLE) {
+          // Switch to chosen process.  It is the process's job
+          // to release its lock and then reacquire it
+          // before jumping back to us.
+          p->state = RUNNING;
+          c->proc = p;
+          p->ticks++;
+          swtch(&c->context, &p->context);
+
+          // Process is done running for now.
+          // It should have changed its p->state before coming back.
+          c->proc = 0;
+        }
+        release(&p->lock);
+        break;
+      }
     }
   }
 }
