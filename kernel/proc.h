@@ -107,4 +107,7 @@ struct proc {
 
   // For Lottery Scheduling
   int tickets;                 // Number of tickets for scheduling
+  int ticks;                   // Number of ticks the process has accumulated
 };
+
+int getpinfo(uint64 addr);

@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "pstat.h"
 
 struct cpu cpus[NCPU];
 
@@ -93,7 +94,7 @@ int
 allocpid()
 {
   int pid;
-  
+
   acquire(&pid_lock);
   pid = nextpid;
   nextpid = nextpid + 1;
@@ -170,6 +171,7 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
   p->tickets = 0;
+  p->ticks = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -254,6 +256,7 @@ userinit(void)
 
   // For Lottery Scheduling
   p->tickets = 1;
+  p->ticks = 0;
 
   release(&p->lock);
 }
@@ -329,6 +332,7 @@ fork(void)
   // For Lottery Scheduling
   // The child process inherits the number of tickets from the parent
   np->tickets = p->tickets;
+  np->ticks = 0;
 
   return pid;
 }
@@ -380,7 +384,7 @@ exit(int status)
 
   // Parent might be sleeping in wait().
   wakeup(p->parent);
-  
+
   acquire(&p->lock);
 
   p->xstate = status;
@@ -558,7 +562,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+
   // Must acquire p->lock in order to
   // change p->state and then call sched.
   // Once we hold p->lock, we can be
@@ -637,7 +641,7 @@ int
 killed(struct proc *p)
 {
   int k;
-  
+
   acquire(&p->lock);
   k = p->killed;
   release(&p->lock);
@@ -702,4 +706,34 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int
+getpinfo(uint64 addr)
+{
+  struct pstat pstat;
+  struct proc *p;
+  int i = 0;
+
+  for(p = proc; p < &proc[NPROC]; p++) {
+    if(p->state != UNUSED) {
+      pstat.inuse[i] = 1;
+      pstat.tickets[i] = p->tickets;
+      pstat.pid[i] = p->pid;
+      pstat.ticks[i] = p->ticks;
+    } else {
+      pstat.inuse[i] = 0;
+      pstat.tickets[i] = 0;
+      pstat.pid[i] = 0;
+      pstat.ticks[i] = 0;
+    }
+    i++;
+  }
+
+  // Copy the data to user space
+  struct proc *curr = myproc();
+  if(copyout(curr->pagetable, addr, (char*)&pstat, sizeof(pstat)) < 0) {
+    return -1;
+  }
+  return 0;
 }

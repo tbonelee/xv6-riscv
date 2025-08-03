@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "pstat.h"
 
 uint64
 sys_exit(void)
@@ -104,4 +105,16 @@ sys_settickets(void)
   }
   myproc()->tickets = n;
   return 0;
+}
+
+uint64
+sys_getpinfo(void)
+{
+  uint64 addr;
+  argaddr(0, &addr);
+  // Check if the pointer is valid
+  if (addr == 0) {
+    return -1;
+  }
+  return getpinfo(addr);
 }
