@@ -742,6 +742,7 @@ getpinfo(uint64 addr)
   int i = 0;
 
   for(p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
     if(p->state != UNUSED) {
       pstat.inuse[i] = 1;
       pstat.tickets[i] = p->tickets;
@@ -753,6 +754,7 @@ getpinfo(uint64 addr)
       pstat.pid[i] = 0;
       pstat.ticks[i] = 0;
     }
+    release(&p->lock);
     i++;
   }
 
