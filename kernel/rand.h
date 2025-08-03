@@ -1,0 +1,1 @@
+int getrandom(int start, int end);
