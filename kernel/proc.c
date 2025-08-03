@@ -169,6 +169,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->tickets = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -251,6 +252,9 @@ userinit(void)
 
   p->state = RUNNABLE;
 
+  // For Lottery Scheduling
+  p->tickets = 1;
+
   release(&p->lock);
 }
 
@@ -321,6 +325,10 @@ fork(void)
   acquire(&np->lock);
   np->state = RUNNABLE;
   release(&np->lock);
+
+  // For Lottery Scheduling
+  // The child process inherits the number of tickets from the parent
+  np->tickets = p->tickets;
 
   return pid;
 }
