@@ -470,7 +470,7 @@ scheduler(void)
     intr_on();
     intr_off();
 
-    int tickets_for_runnable[NPROC];
+    uint tickets_for_runnable[NPROC];
 
     int total_tickets = 0;
     for(int i = 0; i < NPROC; i++) {
@@ -492,7 +492,7 @@ scheduler(void)
     }
 
     int random_number = getrandom(0, total_tickets);
-    int current_ticket = 0;
+    uint current_ticket = 0;
     for(int i = 0; i < NPROC; i++) {
       p = &proc[i];
       current_ticket += tickets_for_runnable[i];
