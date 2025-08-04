@@ -328,12 +328,12 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  release(&np->lock);
-
   // For Lottery Scheduling
   // The child process inherits the number of tickets from the parent
   np->tickets = p->tickets;
   np->ticks = 0;
+  release(&np->lock);
+
 
   return pid;
 }
@@ -494,12 +494,15 @@ scheduler(void)
     int random_number = getrandom(0, total_tickets);
     uint current_ticket = 0;
     for(int i = 0; i < NPROC; i++) {
+      // 0인 경우 티켓이 없는 프로세스이므로 스킵
+      if (tickets_for_runnable[i] == 0) {
+        continue;
+      }
+
       p = &proc[i];
       current_ticket += tickets_for_runnable[i];
-      if (p->state == RUNNABLE && current_ticket >= random_number) {
+      if (current_ticket >= random_number) {
         acquire(&p->lock);
-        // 멀티 프로세서일 때 티켓수를 sum할 때 RUNNABLE이었던 프로세스가
-        // 실제 프로세스 선택 시에 RUNNABLE이 아닐 수 있는 경우를 고려..?
         if (p->state == RUNNABLE) {
           // Switch to chosen process.  It is the process's job
           // to release its lock and then reacquire it
@@ -513,6 +516,7 @@ scheduler(void)
           // It should have changed its p->state before coming back.
           c->proc = 0;
         }
+        // 선택된 프로세스가 실행시킬 타이밍에 RUNNABLE이 아니면 총 티켓 개수를 처음부터 다시 카운트하기 위해 break
         release(&p->lock);
         break;
       }
