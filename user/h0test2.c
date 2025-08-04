@@ -3,11 +3,11 @@
 
 int
 main(int argc, char * argv[]) {
-    int x1 = getreadcount();
+    uint64 x1 = getreadcount();
 
     int rc = fork();
 
-    int total = 0;
+    uint64 total = 0;
     int i;
     for (i = 0; i < 100000; i++) {
         char buf[100];
@@ -16,9 +16,9 @@ main(int argc, char * argv[]) {
 
     if (rc > 0) {
         (void) wait(0);
-        int x2 = getreadcount();
+        uint64 x2 = getreadcount();
         total += (x2 - x1);
-        printf("XV6_TEST_OUTPUT %d\n", total);
+        printf("XV6_TEST_OUTPUT %lu\n", total);
     }
     exit(0);
 }

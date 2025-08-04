@@ -7,7 +7,7 @@ int wait(int*);
 int pipe(int*);
 int write(int, const void*, int);
 int read(int, void*, int);
-int getreadcount(void);
+uint64 getreadcount(void);
 int close(int);
 int kill(int);
 int exec(const char*, char**);
