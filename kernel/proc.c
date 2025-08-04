@@ -95,7 +95,7 @@ int
 allocpid()
 {
   int pid;
-
+  
   acquire(&pid_lock);
   pid = nextpid;
   nextpid = nextpid + 1;
@@ -334,7 +334,6 @@ fork(void)
   np->ticks = 0;
   release(&np->lock);
 
-
   return pid;
 }
 
@@ -385,7 +384,7 @@ exit(int status)
 
   // Parent might be sleeping in wait().
   wakeup(p->parent);
-
+  
   acquire(&p->lock);
 
   p->xstate = status;
@@ -592,7 +591,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-
+  
   // Must acquire p->lock in order to
   // change p->state and then call sched.
   // Once we hold p->lock, we can be
@@ -671,7 +670,7 @@ int
 killed(struct proc *p)
 {
   int k;
-
+  
   acquire(&p->lock);
   k = p->killed;
   release(&p->lock);
