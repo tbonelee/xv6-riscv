@@ -45,7 +45,7 @@ splitmix64_next(void) {
 /**
  * splitmix64 알고리즘을 사용하여 초기화
  */
-void
+static void
 seed_rand(uint64 seed) {
   splitmix64_state = seed;
   s[0] = (uint32)splitmix64_next();
@@ -66,6 +66,6 @@ get_random_below(uint32 max) {
 
 // initialize random number generator
 void
-init_rand(void) {
+randinit(void) {
   seed_rand(r_time());
 }
