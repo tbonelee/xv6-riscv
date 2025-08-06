@@ -24,7 +24,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
-int settickets(int);
+int settickets(uint32);
 int getpinfo(struct pstat*);
 
 // ulib.c

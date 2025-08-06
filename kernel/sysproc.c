@@ -96,9 +96,9 @@ sys_uptime(void)
 uint64
 sys_settickets(void)
 {
-  int n;
+  uint32 n;
 
-  argint(0, &n);
+  argint(0, (int*)&n);
   // Ticket number must be greater than 0
   if (n < 1) {
     return -1;
