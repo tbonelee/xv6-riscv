@@ -469,9 +469,9 @@ scheduler(void)
     intr_on();
     intr_off();
 
-    uint tickets_for_runnable[NPROC];
+    uint32 tickets_for_runnable[NPROC];
 
-    int total_tickets = 0;
+    uint32 total_tickets = 0;
     for(int i = 0; i < NPROC; i++) {
       p = &proc[i];
       acquire(&p->lock);
@@ -490,8 +490,8 @@ scheduler(void)
       continue;
     }
 
-    int random_number = getrandom(0, total_tickets);
-    uint current_ticket = 0;
+    uint32 random_number = get_random_below(total_tickets);
+    uint32 current_ticket = 0;
     for(int i = 0; i < NPROC; i++) {
       // 0인 경우 티켓이 없는 프로세스이므로 스킵
       if (tickets_for_runnable[i] == 0) {

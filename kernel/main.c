@@ -3,6 +3,7 @@
 #include "memlayout.h"
 #include "riscv.h"
 #include "defs.h"
+#include "rand.h"
 
 volatile static int started = 0;
 
@@ -29,6 +30,7 @@ main()
     kvminithart();   // turn on paging
     procinit();      // process table
     trapinit();      // trap vectors
+    init_rand();
     trapinithart();  // install kernel trap vector
     plicinit();      // set up interrupt controller
     plicinithart();  // ask PLIC for device interrupts
