@@ -499,7 +499,7 @@ scheduler(void)
 
       p = &proc[i];
       current_ticket += tickets_for_runnable[i];
-      if (current_ticket >= random_number) {
+      if (current_ticket > random_number) {
         acquire(&p->lock);
         if (p->state == RUNNABLE) {
           // Switch to chosen process.  It is the process's job
