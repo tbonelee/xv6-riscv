@@ -30,7 +30,7 @@ main(int argc, char * argv[]) {
     int MEASUREMENTS = 100;  // Number of measurements to take
     int SLEEP_INTERVAL = 10;  // Sleep interval in ticks
 
-    printf("Starting lottery scheduler test with %d processes (30:20:10 tickets)\n", NUM_PROCESSES);
+    printf("Starting scheduler test with %d processes (30:20:10 tickets)\n", NUM_PROCESSES);
     printf("Time\tPID1_ticks\tPID2_ticks\tPID3_ticks\tTickets1\tTickets2\tTickets3\tRatio1\tRatio2\tRatio3\n");
 
     // Fork child processes
