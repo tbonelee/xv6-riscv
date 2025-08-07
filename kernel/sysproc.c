@@ -93,7 +93,7 @@ sys_uptime(void)
   return xticks;
 }
 
-uint64
+int
 sys_settickets(void)
 {
   uint32 n;
@@ -110,7 +110,7 @@ sys_settickets(void)
   return 0;
 }
 
-uint64
+int
 sys_getpinfo(void)
 {
   uint64 addr;
