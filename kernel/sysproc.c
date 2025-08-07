@@ -106,6 +106,7 @@ sys_settickets(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->tickets = n;
+  p->stride = MAX_TICKETS / n;
   release(&p->lock);
   return 0;
 }

@@ -92,6 +92,8 @@ struct proc {
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
   uint32 tickets;              // Number of tickets for scheduling
+  uint32 stride;               // Stride for Stride Scheduling
+  uint64 pass;
   uint64 ticks;                // Number of ticks the process has accumulated
 
   // wait_lock must be held when using this:
@@ -109,3 +111,5 @@ struct proc {
 
 
 };
+
+#define MAX_TICKETS 10000

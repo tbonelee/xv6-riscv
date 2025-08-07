@@ -171,7 +171,35 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
   p->tickets = 0;
+  p->stride = 0;
+  p->pass = 0;
   p->ticks = 0;
+}
+
+// 0으로 초기화되어도 `get_runnable_min_pass_proc`에서 적절한 값으로 덮어씌워진다.
+// 프로그램 초기에 덮어씌워지지 않은 값이 읽혀서 사용되더라도 프로그램 초기에는
+// 실제 최소 pass 값이 0이므로 큰 이슈가 없을 것으로 예상?
+static uint64 cached_min_pass = 0;
+
+// 주의) proc에 대한 락을 잡은 상태에서 호출하면 중복 acquire로 패닉 발생할 수 있음
+static struct proc*
+get_runnable_min_pass_proc(void) {
+  uint64 min_pass = ((uint64)~0ULL); // UINT64_MAX
+  struct proc* min_pass_proc = 0;
+  for(int i = 0; i < NPROC; i++) {
+    acquire(&proc[i].lock);
+    if(proc[i].state == RUNNABLE) {
+      if(proc[i].pass < min_pass) {
+        min_pass = proc[i].pass;
+        min_pass_proc = &proc[i];
+      }
+    }
+    release(&proc[i].lock);
+  }
+  if (min_pass_proc == 0) {
+    return 0;
+  }
+  return min_pass_proc;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -254,8 +282,10 @@ userinit(void)
 
   p->state = RUNNABLE;
 
-  // For Lottery Scheduling
+  // For Stride Scheduling
   p->tickets = 1;
+  p->stride = MAX_TICKETS / p->tickets;
+  p->pass = 0;
   p->ticks = 0;
 
   release(&p->lock);
@@ -327,9 +357,15 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  // For Lottery Scheduling
+  // For Stride Scheduling
   // The child process inherits the number of tickets from the parent
   np->tickets = p->tickets;
+  np->stride = MAX_TICKETS / np->tickets;
+  // 자식 프로세스의 pass값은 가장 작은 pass 값으로 설정.
+  // 자식 프로세스가 부모 프로세스와 같은 pass 값을 갖는 경우 스케쥴링에서 부모와 동일한 선에서 경쟁하게 된다.
+  // 대신 새 자식 프로세스의 pass 값을 글로벌 min pass 값으로 설정하게 되면 최대 한 stride만큼 부모보다 유리한 선에서 스케쥴링
+  // (부모 프로세스 pass - 글로벌 min pass)값이 부모의 stride보다 크다면 부모는 pass값이 최소가 아닐 때 스케쥴링된 것이므로 현재 정책과 모순
+  np->pass = cached_min_pass;
   np->ticks = 0;
   release(&np->lock);
 
@@ -468,57 +504,38 @@ scheduler(void)
     intr_on();
     intr_off();
 
-    uint32 tickets_for_runnable[NPROC];
 
-    uint32 total_tickets = 0;
-    for(uint32 i = 0; i < NPROC; i++) {
-      p = &proc[i];
-      acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        total_tickets += p->tickets;
-        tickets_for_runnable[i] = p->tickets;
-      } else {
-        tickets_for_runnable[i] = 0;
-      }
-      release(&p->lock);
-    }
+    // 고민) 멀티프로세서 환경에서 다른 스케쥴러가 proc 락을 acquire한 경우
+    //      해당 프로세서 타이머 인터럽트 때까지 get_runnable_min_pass_proc()은 블로킹??
+    p = get_runnable_min_pass_proc();
 
-    if(total_tickets == 0) {
+    if(p == 0) {
       // nothing to run; stop running on this core until an interrupt.
       asm volatile("wfi");
       continue;
     }
 
-    uint32 random_number = get_random_below(total_tickets);
-    uint32 current_ticket = 0;
-    for(uint32 i = 0; i < NPROC; i++) {
-      // 0인 경우 티켓이 없는 프로세스이므로 스킵
-      if (tickets_for_runnable[i] == 0) {
-        continue;
-      }
+    // min_pass_proc을 뽑고난 후 다시 실행시키는 사이에 다른 프로세서가
+    // 상태를 변경할 수 있으므로 락을 잡고 상태를 확인?
+    acquire(&p->lock);
+    if (p->state == RUNNABLE) {
+      // Switch to chosen process.  It is the process's job
+      // to release its lock and then reacquire it
+      // before jumping back to us.
+      p->state = RUNNING;
+      c->proc = p;
+      
+      swtch(&c->context, &p->context);
 
-      p = &proc[i];
-      current_ticket += tickets_for_runnable[i];
-      if (current_ticket > random_number) {
-        acquire(&p->lock);
-        if (p->state == RUNNABLE) {
-          // Switch to chosen process.  It is the process's job
-          // to release its lock and then reacquire it
-          // before jumping back to us.
-          p->state = RUNNING;
-          c->proc = p;
-          p->ticks++;
-          swtch(&c->context, &p->context);
+      p->pass += p->stride;
+      cached_min_pass = p->pass;
+      p->ticks++;
 
-          // Process is done running for now.
-          // It should have changed its p->state before coming back.
-          c->proc = 0;
-        }
-        // 선택된 프로세스가 실행시킬 타이밍에 RUNNABLE이 아니면 총 티켓 개수를 처음부터 다시 카운트하기 위해 break
-        release(&p->lock);
-        break;
-      }
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
     }
+    release(&p->lock);
   }
 }
 
