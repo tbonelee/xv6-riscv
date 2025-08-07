@@ -109,5 +109,3 @@ struct proc {
 
 
 };
-
-int getpinfo(uint64 addr);
