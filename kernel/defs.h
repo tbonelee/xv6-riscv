@@ -108,10 +108,6 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 int             getpinfo(uint64 addr);
 
-// rand.c
-uint32          get_random_below(uint32 max);
-void            randinit(void);
-
 // swtch.S
 void            swtch(struct context*, struct context*);
 

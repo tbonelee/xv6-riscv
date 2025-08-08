@@ -29,7 +29,6 @@ main()
     kvminithart();   // turn on paging
     procinit();      // process table
     trapinit();      // trap vectors
-    randinit();
     trapinithart();  // install kernel trap vector
     plicinit();      // set up interrupt controller
     plicinithart();  // ask PLIC for device interrupts
