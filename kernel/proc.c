@@ -173,7 +173,6 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
   p->tickets = 0;
-  p->stride = 0;
   p->pass = 0;
   p->ticks = 0;
 }
@@ -287,7 +286,6 @@ userinit(void)
 
   // For Stride Scheduling
   p->tickets = 1;
-  p->stride = MAX_TICKETS / p->tickets;
   p->pass = 0;
   p->ticks = 0;
 
@@ -363,7 +361,6 @@ fork(void)
   // For Stride Scheduling
   // The child process inherits the number of tickets from the parent
   np->tickets = p->tickets;
-  np->stride = MAX_TICKETS / np->tickets;
   // 자식 프로세스의 pass값은 가장 작은 pass 값으로 설정.
   // 자식 프로세스가 부모 프로세스와 같은 pass 값을 갖는 경우 스케쥴링에서 부모와 동일한 선에서 경쟁하게 된다.
   // 대신 새 자식 프로세스의 pass 값을 글로벌 min pass 값으로 설정하게 되면 최대 한 stride만큼 부모보다 유리한 선에서 스케쥴링
@@ -530,7 +527,7 @@ scheduler(void)
       
       swtch(&c->context, &p->context);
 
-      p->pass += p->stride;
+      p->pass += MAX_TICKETS / p->tickets;
       cached_min_pass = p->pass;
       p->ticks++;
 
