@@ -181,7 +181,8 @@ freeproc(struct proc *p)
 // 0으로 초기화되어도 `get_runnable_min_pass_proc`에서 적절한 값으로 덮어씌워진다.
 // 프로그램 초기에 덮어씌워지지 않은 값이 읽혀서 사용되더라도 프로그램 초기에는
 // 실제 최소 pass 값이 0이므로 큰 이슈가 없을 것으로 예상?
-static uint64 cached_min_pass = 0;
+// _Atomic을 사용하여 멀티코어 환경에서 race condition 방지
+static _Atomic uint64 cached_min_pass = 0;
 
 // 주의) proc에 대한 락을 잡은 상태에서 호출하면 중복 acquire로 패닉 발생할 수 있음
 static struct proc*
