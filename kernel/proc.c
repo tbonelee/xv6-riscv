@@ -7,6 +7,8 @@
 #include "defs.h"
 #include "pstat.h"
 
+#define MAX_TICKETS 10000
+
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];

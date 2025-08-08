@@ -111,5 +111,3 @@ struct proc {
 
 
 };
-
-#define MAX_TICKETS 10000
