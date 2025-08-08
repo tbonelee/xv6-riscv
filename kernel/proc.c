@@ -185,22 +185,28 @@ static _Atomic uint64 cached_min_pass = 0;
 
 // 주의) proc에 대한 락을 잡은 상태에서 호출하면 중복 acquire로 패닉 발생할 수 있음
 static struct proc*
-get_runnable_min_pass_proc(void) {
+get_runnable_min_pass_proc_locked(void) {
   uint64 min_pass = ((uint64)~0ULL); // UINT64_MAX
   struct proc* min_pass_proc = 0;
   for(int i = 0; i < NPROC; i++) {
     acquire(&proc[i].lock);
     if(proc[i].state == RUNNABLE) {
       if(proc[i].pass < min_pass) {
+        // 이전 min_pass_proc이 존재한다면 락을 해제  
+        if(min_pass_proc != 0) {
+          release(&min_pass_proc->lock);
+        }
         min_pass = proc[i].pass;
         min_pass_proc = &proc[i];
+        // 새 min_pass_proc에 대한 락은 유지
+      } else {
+        release(&proc[i].lock);
       }
+    } else {
+      release(&proc[i].lock);
     }
-    release(&proc[i].lock);
   }
-  if (min_pass_proc == 0) {
-    return 0;
-  }
+  // 최소 pass 값을 가진 프로세스를 락을 잡은 상태로 반환
   return min_pass_proc;
 }
 
@@ -505,9 +511,7 @@ scheduler(void)
     intr_off();
 
 
-    // 고민) 멀티프로세서 환경에서 다른 스케쥴러가 proc 락을 acquire한 경우
-    //      해당 프로세서 타이머 인터럽트 때까지 get_runnable_min_pass_proc()은 블로킹??
-    p = get_runnable_min_pass_proc();
+    p = get_runnable_min_pass_proc_locked();
 
     if(p == 0) {
       // nothing to run; stop running on this core until an interrupt.
@@ -515,26 +519,21 @@ scheduler(void)
       continue;
     }
 
-    // min_pass_proc을 뽑고난 후 다시 실행시키는 사이에 다른 프로세서가
-    // 상태를 변경할 수 있으므로 락을 잡고 상태를 확인?
-    acquire(&p->lock);
-    if (p->state == RUNNABLE) {
-      // Switch to chosen process.  It is the process's job
-      // to release its lock and then reacquire it
-      // before jumping back to us.
-      p->state = RUNNING;
-      c->proc = p;
-      
-      swtch(&c->context, &p->context);
+    // Switch to chosen process.  It is the process's job
+    // to release its lock and then reacquire it
+    // before jumping back to us.
+    p->state = RUNNING;
+    c->proc = p;
+    
+    swtch(&c->context, &p->context);
 
-      p->pass += MAX_TICKETS / p->tickets;
-      cached_min_pass = p->pass;
-      p->ticks++;
+    p->pass += MAX_TICKETS / p->tickets;
+    cached_min_pass = p->pass;
+    p->ticks++;
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
     release(&p->lock);
   }
 }
