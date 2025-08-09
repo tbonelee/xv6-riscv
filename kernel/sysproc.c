@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "pstat.h"
 
 uint64
 sys_exit(void)
@@ -90,4 +91,33 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_settickets(void)
+{
+  uint32 n;
+
+  argint(0, (int*)&n);
+  // Ticket number must be greater than 0
+  if (n < 1) {
+    return -1;
+  }
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  p->tickets = n;
+  release(&p->lock);
+  return 0;
+}
+
+uint64
+sys_getpinfo(void)
+{
+  uint64 addr;
+  argaddr(0, &addr);
+  // Check if the pointer is valid
+  if (addr == 0) {
+    return -1;
+  }
+  return getpinfo(addr);
 }

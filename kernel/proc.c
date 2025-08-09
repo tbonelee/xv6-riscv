@@ -5,6 +5,9 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "pstat.h"
+
+#define MAX_TICKETS 10000
 
 struct cpu cpus[NCPU];
 
@@ -169,6 +172,40 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->tickets = 0;
+  p->pass = 0;
+  p->ticks = 0;
+}
+
+// 0으로 초기화되어도 `get_runnable_min_pass_proc`에서 적절한 값으로 덮어씌워진다.
+// 프로그램 초기에 덮어씌워지지 않은 값이 읽혀서 사용되더라도 프로그램 초기에는
+// 실제 최소 pass 값이 0이므로 큰 이슈가 없을 것으로 예상?
+// _Atomic을 사용하여 멀티코어 환경에서 race condition 방지
+static _Atomic uint64 cached_min_pass = 0;
+
+// 주의) proc에 대한 락을 잡은 상태에서 호출하면 중복 acquire로 패닉 발생할 수 있음
+static struct proc*
+get_runnable_min_pass_proc_locked(void) {
+  uint64 min_pass = ((uint64)~0ULL); // UINT64_MAX
+  struct proc* min_pass_proc = 0;
+  for(int i = 0; i < NPROC; i++) {
+    acquire(&proc[i].lock);
+
+    if(proc[i].state == RUNNABLE && proc[i].pass < min_pass) {
+      // 이전 min_pass_proc이 존재한다면 락을 해제
+      if(min_pass_proc != 0) { release(&min_pass_proc->lock); }
+
+      min_pass = proc[i].pass;
+      min_pass_proc = &proc[i];
+
+      // 새 min_pass_proc에 대한 락을 유지한채로, 다음 프로세스 검사
+      continue;
+    }
+
+    release(&proc[i].lock);
+  }
+  // 최소 pass 값을 가진 프로세스를 락을 잡은 상태로 반환
+  return min_pass_proc;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -251,6 +288,11 @@ userinit(void)
 
   p->state = RUNNABLE;
 
+  // For Stride Scheduling
+  p->tickets = 1;
+  p->pass = 0;
+  p->ticks = 0;
+
   release(&p->lock);
 }
 
@@ -320,6 +362,15 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  // For Stride Scheduling
+  // The child process inherits the number of tickets from the parent
+  np->tickets = p->tickets;
+  // 자식 프로세스의 pass값은 가장 작은 pass 값으로 설정.
+  // 자식 프로세스가 부모 프로세스와 같은 pass 값을 갖는 경우 스케쥴링에서 부모와 동일한 선에서 경쟁하게 된다.
+  // 대신 새 자식 프로세스의 pass 값을 글로벌 min pass 값으로 설정하게 되면 최대 한 stride만큼 부모보다 유리한 선에서 스케쥴링
+  // (부모 프로세스 pass - 글로벌 min pass)값이 부모의 stride보다 크다면 부모는 pass값이 최소가 아닐 때 스케쥴링된 것이므로 현재 정책과 모순
+  np->pass = cached_min_pass;
+  np->ticks = 0;
   release(&np->lock);
 
   return pid;
@@ -457,28 +508,32 @@ scheduler(void)
     intr_on();
     intr_off();
 
-    int found = 0;
-    for(p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
-      }
-      release(&p->lock);
-    }
-    if(found == 0) {
+    p = get_runnable_min_pass_proc_locked();
+
+    if(p == 0) {
       // nothing to run; stop running on this core until an interrupt.
       asm volatile("wfi");
+      continue;
     }
+
+    cached_min_pass = p->pass;
+
+    // Switch to chosen process.  It is the process's job
+    // to release its lock and then reacquire it
+    // before jumping back to us.
+    p->state = RUNNING;
+    c->proc = p;
+    
+    swtch(&c->context, &p->context);
+
+    p->pass += MAX_TICKETS / p->tickets;
+    p->ticks++;
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
+    release(&p->lock);
   }
 }
 
@@ -694,4 +749,36 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int
+getpinfo(uint64 addr)
+{
+  struct pstat pstat;
+  struct proc *p;
+  int i = 0;
+
+  for(p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if(p->state != UNUSED) {
+      pstat.inuse[i] = 1;
+      pstat.tickets[i] = p->tickets;
+      pstat.pid[i] = p->pid;
+      pstat.ticks[i] = p->ticks;
+    } else {
+      pstat.inuse[i] = 0;
+      pstat.tickets[i] = 0;
+      pstat.pid[i] = 0;
+      pstat.ticks[i] = 0;
+    }
+    release(&p->lock);
+    i++;
+  }
+
+  // Copy the data to user space
+  struct proc *curr = myproc();
+  if(copyout(curr->pagetable, addr, (char*)&pstat, sizeof(pstat)) < 0) {
+    return -1;
+  }
+  return 0;
 }
