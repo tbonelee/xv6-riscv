@@ -190,21 +190,19 @@ get_runnable_min_pass_proc_locked(void) {
   struct proc* min_pass_proc = 0;
   for(int i = 0; i < NPROC; i++) {
     acquire(&proc[i].lock);
-    if(proc[i].state == RUNNABLE) {
-      if(proc[i].pass < min_pass) {
-        // 이전 min_pass_proc이 존재한다면 락을 해제  
-        if(min_pass_proc != 0) {
-          release(&min_pass_proc->lock);
-        }
-        min_pass = proc[i].pass;
-        min_pass_proc = &proc[i];
-        // 새 min_pass_proc에 대한 락은 유지
-      } else {
-        release(&proc[i].lock);
-      }
-    } else {
-      release(&proc[i].lock);
+
+    if(proc[i].state == RUNNABLE && proc[i].pass < min_pass) {
+      // 이전 min_pass_proc이 존재한다면 락을 해제
+      if(min_pass_proc != 0) { release(&min_pass_proc->lock); }
+
+      min_pass = proc[i].pass;
+      min_pass_proc = &proc[i];
+
+      // 새 min_pass_proc에 대한 락을 유지한채로, 다음 프로세스 검사
+      continue;
     }
+
+    release(&proc[i].lock);
   }
   // 최소 pass 값을 가진 프로세스를 락을 잡은 상태로 반환
   return min_pass_proc;
