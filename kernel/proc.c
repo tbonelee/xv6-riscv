@@ -517,6 +517,8 @@ scheduler(void)
       continue;
     }
 
+    cached_min_pass = p->pass;
+
     // Switch to chosen process.  It is the process's job
     // to release its lock and then reacquire it
     // before jumping back to us.
@@ -526,7 +528,6 @@ scheduler(void)
     swtch(&c->context, &p->context);
 
     p->pass += MAX_TICKETS / p->tickets;
-    cached_min_pass = p->pass;
     p->ticks++;
 
     // Process is done running for now.
