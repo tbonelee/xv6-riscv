@@ -119,6 +119,9 @@ exec(char *path, char **argv)
     if(*s == '/')
       last = s+1;
   safestrcpy(p->name, last, sizeof(p->name));
+
+  // NULL 포인터 페이지 invalid하도록 만들기
+  uvmclear(pagetable, 0);
     
   // Commit to the user image.
   oldpagetable = p->pagetable;
