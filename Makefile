@@ -144,6 +144,8 @@ UPROGS=\
 	$U/_h2graph\
 	$U/_derefnullread\
 	$U/_derefnullwrite\
+	$U/_testmprot\
+	$U/_testmprotfork\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
