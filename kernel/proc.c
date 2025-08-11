@@ -290,6 +290,37 @@ shrinkproc(int n)
   return 0;
 }
 
+// 주어진 범위의 페이지를 read-only로 설정
+// 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
+// 성공 시 0을 반환
+int
+set_pages_readonly(uint64 va, uint64 npages) {
+  uint64 a;
+  pte_t *pte;
+  struct proc *p = myproc();
+
+  if((va % PGSIZE) != 0)
+    return -1;
+
+  if(va < USERVASTART || va >= p->sz || va+sizeof(uint64) > p->sz)
+    return -1;
+
+  // 페이지마다 PTE_R은 1, PTE_W는 0으로 설정. 나머지는 변경하지 않음
+  for(a = va; a < va + npages * PGSIZE; a += PGSIZE) {
+    pte = walk(p->pagetable, a, 0);
+    if(pte == 0)
+      return -1;
+    // 페이지 엔트리 유효 비트 체크
+    if((*pte & PTE_V) == 0)
+      return -1;
+    // 페이지 엔트리가 유저 페이지 엔트리인지 체크
+    if((*pte & PTE_U) == 0)
+      return -1;
+    *pte = (*pte & ~PTE_W) | PTE_R; // PTE_W는 0으로 설정, PTE_R은 1로 설정
+  }
+  return 0;
+}
+
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
 int

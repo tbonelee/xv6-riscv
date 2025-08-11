@@ -132,5 +132,10 @@ sys_getpinfo(void)
 uint64
 sys_mprotect(void)
 {
-  return 0; // TODO
+  uint64 addr;
+  uint64 npages;
+
+  argaddr(0, &addr);
+  argaddr(1, &npages);
+  return set_pages_readonly(addr, npages);
 }
