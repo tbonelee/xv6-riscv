@@ -39,3 +39,4 @@ entry("uptime");
 entry("getreadcount");
 entry("settickets");
 entry("getpinfo");
+entry("mprotect");
