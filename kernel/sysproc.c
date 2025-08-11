@@ -128,3 +128,9 @@ sys_getpinfo(void)
   }
   return getpinfo(addr);
 }
+
+uint64
+sys_mprotect(void)
+{
+  return 0; // TODO
+}
