@@ -142,7 +142,8 @@ UPROGS=\
 	$U/_h0test1\
 	$U/_h0test2\
 	$U/_h2graph\
-	$U/_derefnull\
+	$U/_derefnullread\
+	$U/_derefnullwrite\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
