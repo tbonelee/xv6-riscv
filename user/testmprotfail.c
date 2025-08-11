@@ -37,4 +37,12 @@ main(void) {
     } else {
         printf("FAIL\n");
     }
+
+    // Test 4: len is 0
+    printf("Test 4: len is 0 - ");
+    if (mprotect(p, 0) == -1) {
+        printf("PASS\n");
+    } else {
+        printf("FAIL\n");
+    }
 }

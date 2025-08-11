@@ -299,6 +299,9 @@ set_pages_readonly(uint64 va, uint64 npages) {
   pte_t *pte;
   struct proc *p = myproc();
 
+  if(npages == 0)
+    return -1;
+
   if((va % PGSIZE) != 0)
     return -1;
 
@@ -329,6 +332,9 @@ set_pages_readwrite(uint64 va, uint64 npages) {
   uint64 a;
   pte_t *pte;
   struct proc *p = myproc();
+
+  if(npages == 0)
+    return -1;
 
   if((va % PGSIZE) != 0)
     return -1;
