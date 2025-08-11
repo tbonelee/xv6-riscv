@@ -321,6 +321,10 @@ set_pages_readonly(uint64 va, uint64 npages) {
       return -1;
     *pte = (*pte & ~PTE_W) | PTE_R; // PTE_W는 0으로 설정, PTE_R은 1로 설정
   }
+  
+  // TLB 무효화
+  sfence_vma();
+  
   return 0;
 }
 
@@ -353,6 +357,10 @@ set_pages_readwrite(uint64 va, uint64 npages) {
     // PTE_R, PTE_W 비트 모두 1로 설정
     *pte = *pte | PTE_R | PTE_W;
   }
+  
+  // TLB 무효화
+  sfence_vma();
+  
   return 0;
 }
 
