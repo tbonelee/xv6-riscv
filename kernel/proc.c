@@ -321,6 +321,35 @@ set_pages_readonly(uint64 va, uint64 npages) {
   return 0;
 }
 
+// 주어진 범위의 페이지를 read-write로 설정
+// 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
+// 성공 시 0을 반환
+int
+set_pages_readwrite(uint64 va, uint64 npages) {
+  uint64 a;
+  pte_t *pte;
+  struct proc *p = myproc();
+
+  if((va % PGSIZE) != 0)
+    return -1;
+
+  if(va < USERVASTART || va >= p->sz || va+sizeof(uint64) > p->sz)
+    return -1;
+
+  for(a = va; a < va + npages * PGSIZE; a += PGSIZE) {
+    pte = walk(p->pagetable, a, 0);
+    if(pte == 0)
+      return -1;
+    if((*pte & PTE_V) == 0)
+      return -1;
+    if((*pte & PTE_U) == 0)
+      return -1;
+    // PTE_R, PTE_W 비트 모두 1로 설정
+    *pte = *pte | PTE_R | PTE_W;
+  }
+  return 0;
+}
+
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
 int
