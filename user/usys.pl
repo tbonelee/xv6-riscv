@@ -40,3 +40,4 @@ entry("getreadcount");
 entry("settickets");
 entry("getpinfo");
 entry("mprotect");
+entry("munprotect");

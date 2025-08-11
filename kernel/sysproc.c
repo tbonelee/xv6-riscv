@@ -139,3 +139,14 @@ sys_mprotect(void)
   argaddr(1, &npages);
   return set_pages_readonly(addr, npages);
 }
+
+uint64
+sys_munprotect(void)
+{
+  uint64 addr;
+  uint64 npages;
+
+  argaddr(0, &addr);
+  argaddr(1, &npages);
+  return set_pages_readwrite(addr, npages);
+}
