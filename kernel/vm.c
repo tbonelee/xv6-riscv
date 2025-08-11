@@ -263,7 +263,8 @@ void
 freewalk(pagetable_t pagetable)
 {
   // there are 2^9 = 512 PTEs in a page table.
-  for(int i = 0; i < 512; i++){
+  // 첫 페이지는 invalid한 페이지이므로 스킵하여 i == 1부터 시작
+  for(int i = 1; i < 512; i++){
     pte_t pte = pagetable[i];
     if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
       // this PTE points to a lower-level page table.
@@ -282,8 +283,11 @@ freewalk(pagetable_t pagetable)
 void
 uvmfree(pagetable_t pagetable, uint64 sz)
 {
-  if(sz > 0)
-    uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
+  // p->sz가 USERVASTART보다 큰 경우 (실제로 할당된 메모리가 있는 경우)
+  // p->sz에서 할당된 메모리를 계산하여 해제
+  // 이 때 첫 페이지(0 ~ USRVASTART)는 비워져 있으므로 1을 뺀 값이 npages로 할당되어 uvmunmap 호출
+  if(sz > USERVASTART)
+    uvmunmap(pagetable, USERVASTART, PGROUNDUP(sz)/PGSIZE  - 1, 1);
   freewalk(pagetable);
 }
 
@@ -301,7 +305,8 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   uint flags;
   char *mem;
 
-  for(i = 0; i < sz; i += PGSIZE){
+  // invalid한 첫 페이지는 제외하고 카피
+  for(i = USERVASTART; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       continue;   // page table entry hasn't been allocated
     if((*pte & PTE_V) == 0)
