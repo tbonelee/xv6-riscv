@@ -49,6 +49,11 @@ exec(char *path, char **argv)
   if((pagetable = proc_pagetable(p)) == 0)
     goto bad;
 
+  // 명시적으로 첫 페이지 invalid한 페이지로 할당
+  if ((sz = uvmalloc(pagetable, sz, USERVASTART, 0)) == 0)
+    goto bad;
+  uvmclear(pagetable, 0);
+
   // Load program into memory.
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph))
@@ -120,9 +125,6 @@ exec(char *path, char **argv)
       last = s+1;
   safestrcpy(p->name, last, sizeof(p->name));
 
-  // NULL 포인터 페이지 invalid하도록 만들기
-  uvmclear(pagetable, 0);
-    
   // Commit to the user image.
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
