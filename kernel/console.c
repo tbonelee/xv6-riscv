@@ -144,6 +144,9 @@ consoleintr(int c)
   case C('V'):  // Print vm list.
     vmdump();
     break;
+  case C('R'):  // Print physical page reference counts.
+    print_physical_page_refs();
+    break;
   case C('U'):  // Kill line.
     while(cons.e != cons.w &&
           cons.buf[(cons.e-1) % INPUT_BUF_SIZE] != '\n'){

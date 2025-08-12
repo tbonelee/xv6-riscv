@@ -23,6 +23,7 @@ struct user_physical_page_ref {
 #define TOTAL_PAGES ((PHYSTOP - KERNBASE) / PGSIZE)
 
 #define PA_TO_INDEX(pa) (((uint64)(pa) - KERNBASE) / PGSIZE)
+#define INDEX_TO_PA(idx) (KERNBASE + (idx * PGSIZE))
 
 // Reference count for each physical page
 struct user_physical_page_ref user_physical_page_refs[TOTAL_PAGES];
@@ -139,4 +140,43 @@ kalloc(void)
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+// 사용 중인 물리 페이지들의 정보를 락 없이 출력하는 디버깅 함수
+// 연속된 페이지들은 범위로 묶어서 출력
+void
+print_physical_page_refs(void)
+{
+  printf("Physical Page Reference Counts:\n");
+  printf("Index Range          Physical Address Range               Ref Count\n");
+  printf("-------------------  -----------------------------------  ---------\n");
+  
+  int i = 0;
+  while (i < TOTAL_PAGES) {
+    uint32 ref = user_physical_page_refs[i].ref;
+    
+    if (ref > 0) {
+      int start_idx = i;
+      uint64 start_pa = INDEX_TO_PA(i);
+      
+      // 같은 참조 카운트를 가진 연속된 페이지들 찾기
+      while (i + 1 < TOTAL_PAGES && 
+             user_physical_page_refs[i + 1].ref == ref) {
+        i++;
+      }
+      
+      int end_idx = i;
+      uint64 end_pa = INDEX_TO_PA(i);
+      
+      if (start_idx == end_idx) {
+        // 단일 페이지
+        printf("%-19d  0x%-35lx  %d\n", start_idx, start_pa, ref);
+      } else {
+        // 페이지 범위
+        printf("%-8d-%-10d  0x%lx-0x%-24lx  %d\n", 
+               start_idx, end_idx, start_pa, end_pa, ref);
+      }
+    }
+    i++;
+  }
 }

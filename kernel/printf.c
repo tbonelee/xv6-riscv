@@ -50,6 +50,43 @@ printint(long long xx, int base, int sign)
 }
 
 static void
+printint_padded(long long xx, int base, int sign, int width, int left_align)
+{
+  char buf[20];
+  int i;
+  unsigned long long x;
+
+  if(sign && (sign = (xx < 0)))
+    x = -xx;
+  else
+    x = xx;
+
+  i = 0;
+  do {
+    buf[i++] = digits[x % base];
+  } while((x /= base) != 0);
+
+  if(sign)
+    buf[i++] = '-';
+
+  int num_len = i;
+  
+  if(left_align) {
+    // 좌측 정렬: 숫자 먼저 출력 후 공백
+    while(--i >= 0)
+      consputc(buf[i]);
+    for(int j = num_len; j < width; j++)
+      consputc(' ');
+  } else {
+    // 우측 정렬: 공백 먼저 출력 후 숫자
+    for(int j = num_len; j < width; j++)
+      consputc(' ');
+    while(--i >= 0)
+      consputc(buf[i]);
+  }
+}
+
+static void
 printintpad(long long xx, int base, int sign, int width, char pad)
 {
   char buf[20];
@@ -121,9 +158,32 @@ printf(char *fmt, ...)
     if(c1) c2 = fmt[i+2] & 0xff;
     if(c2) c3 = fmt[i+3] & 0xff;
     if(c3) c4 = fmt[i+4] & 0xff;
+    
+    // 좌측 정렬 플래그 확인
+    int left_align = 0;
+    if(c0 == '-') {
+      left_align = 1;
+      i++;
+      c0 = fmt[i+0] & 0xff;
+      c1 = c2 = c3 = c4 = 0;
+      if(c0) c1 = fmt[i+1] & 0xff;
+      if(c1) c2 = fmt[i+2] & 0xff;
+      if(c2) c3 = fmt[i+3] & 0xff;
+      if(c3) c4 = fmt[i+4] & 0xff;
+    }
 
     if(c0 == 'd'){
-      printint(va_arg(ap, int), 10, 1);
+      if(left_align) {
+        printint(va_arg(ap, int), 10, 1);
+      } else {
+        printint(va_arg(ap, int), 10, 1);
+      }
+    } else if(is_nonzerodigit(c0) && c1 == 'd') {
+      printint_padded(va_arg(ap, int), 10, 1, c0 ^ '0', left_align);
+      i += 1;
+    } else if(is_nonzerodigit(c0) && is_digit(c1) && c2 == 'd') {
+      printint_padded(va_arg(ap, int), 10, 1, (c0 ^ '0') * 10 + (c1 ^ '0'), left_align);
+      i += 2;
     } else if(c0 == 'l' && c1 == 'd'){
       printint(va_arg(ap, uint64), 10, 1);
       i += 1;
@@ -157,7 +217,7 @@ printf(char *fmt, ...)
       printint(va_arg(ap, uint64), 16, 0);
       i += 1;
     } else if(is_nonzerodigit(c0) && is_digit(c1) && c2 == 'l' && c3 == 'x') {
-      printintpad(va_arg(ap, uint64), 16, 0, (c0 ^ '0') * 10 + (c1 ^ '0'), ' ');
+      printint_padded(va_arg(ap, uint64), 16, 0, (c0 ^ '0') * 10 + (c1 ^ '0'), left_align);
       i += 3;
     } else if(c0 == '0' && is_digit(c1) && c2 == 'l' && c3 == 'x') {
       printintpad(va_arg(ap, uint64), 16, 0, c1 ^ '0', '0');

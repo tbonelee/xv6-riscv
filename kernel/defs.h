@@ -60,6 +60,7 @@ uint32          increment_ref(void *pa);
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
+void            print_physical_page_refs(void);
 
 // log.c
 void            initlog(int, struct superblock*);
