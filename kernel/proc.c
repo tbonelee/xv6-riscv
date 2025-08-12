@@ -828,6 +828,67 @@ procdump(void)
   }
 }
 
+static _Bool is_invalid_pte(pte_t pte) { return (pte & PTE_V) == 0; }
+static uint64 idx_to_va(int i2, int i1, int i0) {
+  return
+    ((uint64)i2 << (PGSHIFT + 2*9)) |
+    ((uint64)i1 << (PGSHIFT + 1*9)) |
+    ((uint64)i0 << (PGSHIFT + 0*9));
+}
+
+// For each all processes, iterate through their pagetables according to
+// Sv39 scheme and print out all valid pages, for debugging.
+//
+// Runs when user types ^V on console.
+// No lock to avoid wedging a stuck machine further.
+void
+vmdump(void)
+{
+  printf("\n\n");
+  for (struct proc *p = proc; p < &proc[NPROC]; ++p) {
+    if (p->state == UNUSED) { continue; }
+    printf("* pid = %d (\"%s\")\n", p->pid, p->name);
+    if (p->pagetable == 0) { printf("(no pagetable found)\n"); continue; }
+
+    printf(
+      "   PTE index      virtual     physical    flags\n"
+      "  LV2 LV1 LV0     address     address    DAGUXWRV\n"
+      "  -----------  ------------  ----------  --------\n"
+    );
+
+    // Level 2
+    pagetable_t pt2 = p->pagetable;
+    for (int i2 = 0; i2 < 512; ++i2) {
+      pte_t pte = pt2[i2];
+      if (is_invalid_pte(pte)) { continue; }
+      // NOTE: xv6 does not support superpages, so we won't handle it
+
+      // Level 1
+      pagetable_t pt1 = (pagetable_t)PTE2PA(pte);
+      for (int i1 = 0; i1 < 512; ++i1) {
+        pte_t pte = pt1[i1];
+        if (is_invalid_pte(pte)) { continue; }
+        // NOTE: xv6 does not support superpages, so we won't handle it
+
+        // Level 0
+        pagetable_t pt0 = (pagetable_t)PTE2PA(pte);
+        for (int i0 = 0; i0 < 512; ++i0) {
+          pte_t pte = pt0[i0];
+          if (is_invalid_pte(pte)) { continue; }
+
+          printf("  %03u %03u %03u  \x1b[90m0x\x1b[0m%010lx  \x1b[90m0x\x1b[0m%08lx  %08lb\n",
+            i2, i1, i0,
+            idx_to_va(i2, i1, i0),
+            PTE2PA(pte),
+            PTE_FLAGS(pte));
+        }
+      }
+    }
+    printf("\n");
+  }
+  printf("\n");
+}
+
 int
 getpinfo(uint64 addr)
 {
