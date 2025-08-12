@@ -260,7 +260,7 @@ userinit(void)
 
   p = allocproc();
   initproc = p;
-
+  
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
