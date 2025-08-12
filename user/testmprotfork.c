@@ -4,7 +4,7 @@
 int
 main(void) {
     // Allocate a page of memory
-    char *p = malloc(40960);
+    char *p = malloc(4096);
     if (p == 0) {
         fprintf(2, "umalloc failed\n");
         return 1;
