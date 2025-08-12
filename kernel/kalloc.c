@@ -9,11 +9,32 @@
 #include "riscv.h"
 #include "defs.h"
 
-void freerange(void *pa_start, void *pa_end);
+void freerange_on_kinit(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 
+struct user_physical_page_ref {
+  uint32 ref;
+  struct spinlock lock;
+};
+
+// Total number of physical pages in the system
+#define TOTAL_PAGES ((PHYSTOP - KERNBASE) / PGSIZE)
+
+#define PA_TO_INDEX(pa) (((uint64)(pa) - KERNBASE) / PGSIZE)
+
+// Reference count for each physical page
+struct user_physical_page_ref user_physical_page_refs[TOTAL_PAGES];
+
+void
+physical_page_ref_init()
+{
+  for (int i = 0; i < TOTAL_PAGES; i++) {
+    initlock(&user_physical_page_refs[i].lock, "user_physical_page_ref");
+  }
+
+}
 struct run {
   struct run *next;
 };
@@ -27,16 +48,21 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+  freerange_on_kinit(end, (void*)PHYSTOP);
 }
 
+// 부팅 초기 kinit 함수에서만 호출되는 함수
+// freelist 초기화 및 user_physical_page_refs 초기화
 void
-freerange(void *pa_start, void *pa_end)
+freerange_on_kinit(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE) {
     kfree(p);
+    initlock(&user_physical_page_refs[PA_TO_INDEX(p)].lock, "user_physical_page_ref");
+    user_physical_page_refs[PA_TO_INDEX(p)].ref = 0;
+  }
 }
 
 // Free the page of physical memory pointed at by pa,
