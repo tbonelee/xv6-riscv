@@ -33,8 +33,42 @@ physical_page_ref_init()
   for (int i = 0; i < TOTAL_PAGES; i++) {
     initlock(&user_physical_page_refs[i].lock, "user_physical_page_ref");
   }
-
 }
+
+// kalloc으로 할당되고 mappages로 맵핑된 페이지가 kfree되는 경우에만 호출되는 함수
+uint32
+decrement_ref(void *pa)
+{
+  uint32 ref;
+  int idx;
+
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("decrement_ref");
+
+  idx = PA_TO_INDEX(pa);
+  acquire(&user_physical_page_refs[idx].lock);
+  ref = user_physical_page_refs[idx].ref--;
+  release(&user_physical_page_refs[idx].lock);
+  return ref;
+}
+
+// kalloc으로 할당된 페이지를 맵핑하는 경우에만 호출되는 함수
+uint32
+increment_ref(void *pa)
+{
+  uint32 ref;
+  int idx;
+
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("increment_ref");
+
+  idx = PA_TO_INDEX(pa);
+  acquire(&user_physical_page_refs[idx].lock);
+  ref = user_physical_page_refs[idx].ref++;
+  release(&user_physical_page_refs[idx].lock);
+  return ref;
+}
+
 struct run {
   struct run *next;
 };
