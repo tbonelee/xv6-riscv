@@ -48,6 +48,8 @@ decrement_ref(void *pa)
 
   idx = PA_TO_INDEX(pa);
   acquire(&user_physical_page_refs[idx].lock);
+  if (user_physical_page_refs[idx].ref == 0) 
+    panic("decrement_ref: ref is 0");
   ref = user_physical_page_refs[idx].ref--;
   release(&user_physical_page_refs[idx].lock);
   return ref;
