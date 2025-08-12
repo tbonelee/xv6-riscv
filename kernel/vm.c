@@ -461,7 +461,7 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
   struct proc *p = myproc();
   ka = 0;
 
-  if (va >= p->sz)
+  if (va < USERVASTART || va >= p->sz)
     return 0;
   va = PGROUNDDOWN(va);
   if(ismapped(pagetable, va)) {
