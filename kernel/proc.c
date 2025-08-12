@@ -158,13 +158,8 @@ found:
 static void
 freeproc(struct proc *p)
 {
-  uint32 ref;
-
-  if(p->trapframe) {
-    ref = decrement_ref((void*)p->trapframe);
-    if (ref == 0)
-      kfree((void*)p->trapframe);
-  }
+  if(p->trapframe)
+    kfree((void*)p->trapframe);
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
