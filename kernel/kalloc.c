@@ -158,6 +158,8 @@ print_physical_page_refs(void)
   printf("-------------------  -----------------------------------  ---------\n");
   
   int i = 0;
+  int total_pages_with_refs = 0;
+  
   while (i < TOTAL_PAGES) {
     uint32 ref = user_physical_page_refs[i].ref;
     
@@ -174,6 +176,9 @@ print_physical_page_refs(void)
       int end_idx = i;
       uint64 end_pa = INDEX_TO_PA(i);
       
+      // 참조 카운트가 있는 페이지 수 카운트
+      total_pages_with_refs += (end_idx - start_idx + 1);
+      
       if (start_idx == end_idx) {
         // 단일 페이지
         printf("%-19d  0x%-35lx  %d\n", start_idx, start_pa, ref);
@@ -185,4 +190,7 @@ print_physical_page_refs(void)
     }
     i++;
   }
+  
+  printf("-------------------  -----------------------------------  ---------\n");
+  printf("Total pages with ref count > 0: %d\n", total_pages_with_refs);
 }
