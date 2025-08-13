@@ -535,3 +535,40 @@ ismapped(pagetable_t pagetable, uint64 va)
   }
   return 0;
 }
+
+// 기존에 writable한 CoW 페이지에 대해 copy-on-write 수행
+uint64
+cow_vmfault(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte;
+  uint64 pa;
+  uint flags;
+  struct proc *p = myproc();
+  void *mem;
+
+  if(va < USERVASTART || va >= p->sz)
+    return 0;
+  va = PGROUNDDOWN(va);
+  if((pte = walk(pagetable, va, 0)) == 0)
+    return 0;
+  if((*pte & PTE_V) == 0)
+    return 0;
+  if((*pte & PTE_W) == 0)
+    return 0;
+
+  if((*pte & PTE_RSW0) == 0)
+    return 0;
+
+  pa = PTE2PA(*pte);
+  flags = (PTE_FLAGS(*pte) & ~PTE_RSW0) | PTE_W;
+
+  if((mem = kalloc()) == 0)
+    return 0;
+  memmove(mem, (void*)pa, PGSIZE);
+  uvmunmap(pagetable, va, 1, 1);
+  if(mappages(pagetable, va, PGSIZE, (uint64)mem, flags) != 0) {
+    decrement_ref(mem);
+    return 0;
+  }
+  return (uint64)mem;
+}
