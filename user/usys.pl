@@ -42,3 +42,4 @@ entry("getpinfo");
 entry("mprotect");
 entry("munprotect");
 entry("vfork");
+entry("vmdump");

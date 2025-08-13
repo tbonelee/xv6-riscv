@@ -26,3 +26,4 @@
 #define SYS_mprotect        25
 #define SYS_munprotect      26
 #define SYS_vfork           27
+#define SYS_vmdump          28

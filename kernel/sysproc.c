@@ -156,3 +156,10 @@ sys_munprotect(void)
   argaddr(1, &npages);
   return set_pages_readwrite(addr, npages);
 }
+
+uint64
+sys_vmdump(void)
+{
+  vmdump();
+  return 0;
+}
