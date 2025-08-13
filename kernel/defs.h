@@ -55,10 +55,9 @@ int             writei(struct inode*, int, uint64, uint, uint);
 void            itrunc(struct inode*);
 
 // kalloc.c
-uint32          decrement_ref(void *pa);
-uint32          increment_ref(void *pa);
 void*           kalloc(void);
-void            kfree(void *);
+uint32          increment_ref(void *pa);
+void            decrement_ref(void *);
 void            kinit(void);
 void            print_physical_page_refs(void);
 
@@ -162,8 +161,8 @@ int             uartgetc(void);
 // vm.c
 void            kvminit(void);
 void            kvminithart(void);
-void            kvmmap(pagetable_t, uint64, uint64, uint64, int, _Bool);
-int             mappages(pagetable_t, uint64, uint64, uint64, int, _Bool);
+void            kvmmap(pagetable_t, uint64, uint64, uint64, int);
+int             mappages(pagetable_t, uint64, uint64, uint64, int);
 pagetable_t     uvmcreate(void);
 uint64          uvmalloc(pagetable_t, uint64, uint64, int);
 uint64          uvmdealloc(pagetable_t, uint64, uint64);
