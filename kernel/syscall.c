@@ -111,6 +111,7 @@ extern uint64 sys_mprotect(void);
 extern uint64 sys_munprotect(void);
 extern uint64 sys_vfork(void);
 extern uint64 sys_vmdump(void);
+extern uint64 sys_refdump(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -143,6 +144,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_munprotect]    sys_munprotect,
 [SYS_vfork]         sys_vfork,
 [SYS_vmdump]        sys_vmdump,
+[SYS_refdump]       sys_refdump,
 };
 
 void

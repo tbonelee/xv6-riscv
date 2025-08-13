@@ -163,3 +163,10 @@ sys_vmdump(void)
   vmdump();
   return 0;
 }
+
+uint64
+sys_refdump(void)
+{
+  print_physical_page_refs();
+  return 0;
+}
