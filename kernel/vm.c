@@ -373,6 +373,7 @@ uvmcopy_cow(pagetable_t old, pagetable_t new, uint64 sz)
     // 부모 프로세스의 페이지 테이블에 새 플래그 버전의 페이지 맵핑
     if(mappages(old, va, PGSIZE, pa, flags) != 0)
       goto err;
+    increment_ref((void*)pa);
   }
   return 0;
 
