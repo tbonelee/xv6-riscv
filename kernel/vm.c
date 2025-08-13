@@ -335,7 +335,6 @@ uvmcopy_cow(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, va;
   uint flags;
-  char *mem;
 
   // invalid한 첫 페이지는 제외
   for(va = USERVASTART; va < sz; va += PGSIZE){
