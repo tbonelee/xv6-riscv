@@ -271,8 +271,7 @@ void
 freewalk(pagetable_t pagetable)
 {
   // there are 2^9 = 512 PTEs in a page table.
-  // 첫 페이지는 invalid한 페이지이므로 스킵하여 i == 1부터 시작
-  for(int i = 1; i < 512; i++){
+  for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
     if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
       // this PTE points to a lower-level page table.
