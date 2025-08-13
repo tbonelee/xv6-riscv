@@ -313,8 +313,7 @@ set_pages_readonly(uint64 va, uint64 npages) {
     // a는 이미 PGSIZE로 정렬되어 있으므로 PGROUNDDOWN(a)와 동일
     pa0 = walkaddr(p->pagetable, a);
     if(pa0 == 0) {
-      // TODO: vmfault()의 `read` 인자는 함수 내부에서 사용되지 않아서 어떤 값을 넣을지 확신이 없음. 메모리 값을 수정하는 것은 아니므로 read == 1로 일단 설정함.
-      if(vmfault(p->pagetable, a, 0) == 0) {
+      if(vmfault(p->pagetable, a) == 0) {
         return -1;
       }
     }
@@ -358,8 +357,7 @@ set_pages_readwrite(uint64 va, uint64 npages) {
     // a는 이미 PGSIZE로 정렬되어 있으므로 PGROUNDDOWN(a)와 동일
     pa0 = walkaddr(p->pagetable, a);
     if(pa0 == 0) {
-      // TODO: vmfault()의 `read` 인자는 함수 내부에서 사용되지 않아서 어떤 값을 넣을지 확신이 없음. 메모리 값을 수정하는 것은 아니므로 read == 1로 일단 설정함.
-      if(vmfault(p->pagetable, a, 0) == 0) {
+      if(vmfault(p->pagetable, a) == 0) {
         return -1;
       }
     }
