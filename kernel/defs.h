@@ -60,6 +60,7 @@ uint32          increment_ref(void *pa);
 void            decrement_ref(void *);
 void            decrement_ref_withheld_lock(void *);
 void            kinit(void);
+void            dump_freelist(void);
 void            print_physical_page_refs(void);
 struct user_physical_page_ref *
                 get_user_physical_page_ref_locked(void *pa);

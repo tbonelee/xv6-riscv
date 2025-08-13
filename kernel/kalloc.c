@@ -173,6 +173,39 @@ kalloc(void)
   return (void*)r;
 }
 
+// kmem.freelist를 덤프하는 디버깅 함수
+void
+dump_freelist(void)
+{
+  printf("Kmem Free List:\n");
+  printf("Address           Next\n");
+  printf("---------------   ---------------\n");
+  
+  acquire(&kmem.lock);
+  struct run *r = kmem.freelist;
+  int count = 0;
+  
+  while (r) {
+    printf("0x%-13lx   0x%-13lx\n", (uint64)r, (uint64)r->next);
+    r = r->next;
+    count++;
+    
+    // 무한 루프 방지를 위한 제한
+    if (count > 1000) {
+      printf("... (truncated after 1000 entries)\n");
+      break;
+    }
+  }
+  
+  if (count == 0) {
+    printf("(empty)\n");
+  }
+  
+  release(&kmem.lock);
+  printf("---------------   ---------------\n");
+  printf("Total free pages: %d\n", count);
+}
+
 // 사용 중인 물리 페이지들의 정보를 락 없이 출력하는 디버깅 함수
 // 연속된 페이지들은 범위로 묶어서 출력
 void

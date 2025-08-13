@@ -147,6 +147,9 @@ consoleintr(int c)
   case C('R'):  // Print physical page reference counts.
     print_physical_page_refs();
     break;
+  case C('F'):  // Print free list.
+    dump_freelist();
+    break;
   case C('U'):  // Kill line.
     while(cons.e != cons.w &&
           cons.buf[(cons.e-1) % INPUT_BUF_SIZE] != '\n'){
