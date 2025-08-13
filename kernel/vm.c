@@ -319,7 +319,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   return 0;
 
  err:
-  uvmunmap(new, 0, i / PGSIZE, 1);
+  uvmunmap(new, USERVASTART, (i - USERVASTART) / PGSIZE, 1);
   return -1;
 }
 
