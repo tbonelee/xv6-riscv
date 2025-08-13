@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 #include "pstat.h"
+#include "kalloc.h"
 
 #define MAX_TICKETS 10000
 
@@ -234,7 +235,7 @@ proc_pagetable(struct proc *p)
   // trampoline.S.
   if(mappages(pagetable, TRAPFRAME, PGSIZE,
               (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
-    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, TRAMPOLINE, 1, UVMUNMAP_NO_FREE);
     uvmfree(pagetable, 0);
     return 0;
   }
@@ -247,8 +248,8 @@ proc_pagetable(struct proc *p)
 void
 proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
-  uvmunmap(pagetable, TRAMPOLINE, 1, 0);
-  uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, TRAMPOLINE, 1, UVMUNMAP_NO_FREE);
+  uvmunmap(pagetable, TRAPFRAME, 1, UVMUNMAP_NO_FREE);
   uvmfree(pagetable, sz);
 }
 
@@ -290,13 +291,16 @@ shrinkproc(int n)
   return 0;
 }
 
-// 주어진 범위의 페이지를 read-only로 설정
+// 주어진 범위의 페이지에 지정된 플래그를 설정
 // 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
 // 성공 시 0을 반환
-int
-set_pages_readonly(uint64 va, uint64 npages) {
+static int
+set_pages_flag(uint64 va, uint64 npages, uint64 clear_mask, uint64 set_mask) {
   uint64 a, pa0;
+  uint flags;
   pte_t *pte;
+  struct user_physical_page_ref *page_ref;
+  void *mem;
   struct proc *p = myproc();
 
   if(npages == 0)
@@ -308,12 +312,11 @@ set_pages_readonly(uint64 va, uint64 npages) {
   if(va < USERVASTART || va >= p->sz || va+sizeof(uint64) > p->sz)
     return -1;
 
-  // 페이지마다 PTE_R은 1, PTE_W는 0으로 설정. 나머지는 변경하지 않음
   for(a = va; a < va + npages * PGSIZE; a += PGSIZE) {
     // a는 이미 PGSIZE로 정렬되어 있으므로 PGROUNDDOWN(a)와 동일
     pa0 = walkaddr(p->pagetable, a);
     if(pa0 == 0) {
-      if(vmfault(p->pagetable, a, 0) == 0) {
+      if((pa0 = vmfault(p->pagetable, a, 0)) == 0) {
         return -1;
       }
     }
@@ -326,7 +329,30 @@ set_pages_readonly(uint64 va, uint64 npages) {
     // 페이지 엔트리가 유저 페이지 엔트리인지 체크
     if((*pte & PTE_U) == 0)
       return -1;
-    *pte = (*pte & ~PTE_W) | PTE_R; // PTE_W는 0으로 설정, PTE_R은 1로 설정
+
+    // CoW로 공유된 페이지이면 먼저 복사 후 시도
+    page_ref = get_user_physical_page_ref_locked((void *)pa0);
+    if(page_ref->ref > 1) {
+      flags = PTE_FLAGS(*pte) & ~PTE_RSW0;
+      if (*pte & PTE_RSW0)
+        flags |= PTE_W;
+
+      if((mem = kalloc()) == 0) {
+        release(&page_ref->lock);
+        return -1;
+      }
+      memmove(mem, (void *)pa0, PGSIZE);
+      // 락을 잡은 상태로 물리 메모리를 해제해야 하므로 UVMUNMAP_FREE_WITHHELD 사용
+      uvmunmap(p->pagetable, a, 1, UVMUNMAP_FREE_WITHHELD);
+      if(mappages(p->pagetable, a, PGSIZE, (uint64)mem, flags) != 0) {
+        decrement_ref(mem);
+        release(&page_ref->lock);
+        return -1;
+      }
+    }
+    release(&page_ref->lock);
+
+    *pte = (*pte & ~clear_mask) | set_mask;
   }
   
   // TLB 무효화
@@ -335,47 +361,20 @@ set_pages_readonly(uint64 va, uint64 npages) {
   return 0;
 }
 
+// 주어진 범위의 페이지를 read-only로 설정
+// 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
+// 성공 시 0을 반환
+int
+set_pages_readonly(uint64 va, uint64 npages) {
+  return set_pages_flag(va, npages, PTE_W, PTE_R);
+}
+
 // 주어진 범위의 페이지를 read-write로 설정
 // 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
 // 성공 시 0을 반환
 int
 set_pages_readwrite(uint64 va, uint64 npages) {
-  uint64 a, pa0;
-  pte_t *pte;
-  struct proc *p = myproc();
-
-  if(npages == 0)
-    return -1;
-
-  if((va % PGSIZE) != 0)
-    return -1;
-
-  if(va < USERVASTART || va >= p->sz || va+sizeof(uint64) > p->sz)
-    return -1;
-
-  for(a = va; a < va + npages * PGSIZE; a += PGSIZE) {
-    // a는 이미 PGSIZE로 정렬되어 있으므로 PGROUNDDOWN(a)와 동일
-    pa0 = walkaddr(p->pagetable, a);
-    if(pa0 == 0) {
-      if(vmfault(p->pagetable, a, 0) == 0) {
-        return -1;
-      }
-    }
-    pte = walk(p->pagetable, a, 0);
-    if(pte == 0)
-      return -1;
-    if((*pte & PTE_V) == 0)
-      return -1;
-    if((*pte & PTE_U) == 0)
-      return -1;
-    // PTE_R, PTE_W 비트 모두 1로 설정
-    *pte = *pte | PTE_R | PTE_W;
-  }
-  
-  // TLB 무효화
-  sfence_vma();
-  
-  return 0;
+  return set_pages_flag(va, npages, 0, PTE_R | PTE_W);
 }
 
 static int

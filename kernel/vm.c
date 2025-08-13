@@ -180,7 +180,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 // page-aligned. It's OK if the mappings don't exist.
 // Optionally free the physical memory.
 void
-uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
+uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, enum uvmunmap_free_mode free_mode)
 {
   uint64 a;
   pte_t *pte;
@@ -193,9 +193,15 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       continue;   
     if((*pte & PTE_V) == 0)  // has physical page been allocated?
       continue;
-    if(do_free){
+    if(free_mode != UVMUNMAP_NO_FREE){
       uint64 pa = PTE2PA(*pte);
-      decrement_ref((void*)pa);
+      if(free_mode == UVMUNMAP_FREE) {
+        decrement_ref((void*)pa);
+      } else if(free_mode == UVMUNMAP_FREE_WITHHELD) {
+        decrement_ref_withheld_lock((void*)pa);
+      } else {
+        panic("uvmunmap: invalid free_mode");
+      }
     }
     *pte = 0;
   }
@@ -255,7 +261,7 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 
   if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
     int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
-    uvmunmap(pagetable, PGROUNDUP(newsz), npages, 1);
+    uvmunmap(pagetable, PGROUNDUP(newsz), npages, UVMUNMAP_FREE);
   }
 
   return newsz;
@@ -290,7 +296,7 @@ uvmfree(pagetable_t pagetable, uint64 sz)
   // p->sz에서 할당된 메모리를 계산하여 해제
   // 이 때 첫 페이지(0 ~ USRVASTART)는 비워져 있으므로 1을 뺀 값이 npages로 할당되어 uvmunmap 호출
   if(sz > USERVASTART)
-    uvmunmap(pagetable, USERVASTART, PGROUNDUP(sz)/PGSIZE  - 1, 1);
+    uvmunmap(pagetable, USERVASTART, PGROUNDUP(sz)/PGSIZE  - 1, UVMUNMAP_FREE);
   freewalk(pagetable);
 }
 
@@ -327,7 +333,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   return 0;
 
  err:
-  uvmunmap(new, USERVASTART, (i - USERVASTART) / PGSIZE, 1);
+  uvmunmap(new, USERVASTART, (i - USERVASTART) / PGSIZE, UVMUNMAP_FREE);
   return -1;
 }
 
@@ -362,7 +368,7 @@ uvmcopy_cow(pagetable_t old, pagetable_t new, uint64 sz)
     // 부모 프로세스의 페이지 테이블에서 기존 플래그 버전의 페이지 맵핑 제거
     // 자식 프로세스에 먼저 맵핑하여 참조 카운트 증가시킨 후 호출해야,
     // 참조 카운트가 0이 되어 물리 메모리가 해제되는 것을 방지할 수 있다.
-    uvmunmap(old, va, 1, 1);
+    uvmunmap(old, va, 1, UVMUNMAP_FREE);
 
     // 부모 프로세스의 페이지 테이블에 새 플래그 버전의 페이지 맵핑
     if(mappages(old, va, PGSIZE, pa, flags) != 0)
@@ -372,7 +378,7 @@ uvmcopy_cow(pagetable_t old, pagetable_t new, uint64 sz)
 
  // 중도 실패 시 맵핑 성공한 자식 프로세스의 페이지 테이블 맵핑 제거
  err:
-  uvmunmap(new, USERVASTART, (va - USERVASTART) / PGSIZE, 1);
+  uvmunmap(new, USERVASTART, (va - USERVASTART) / PGSIZE, UVMUNMAP_FREE);
   return -1;
 }
 
@@ -535,7 +541,7 @@ cow_vmfault(pagetable_t pagetable, uint64 va)
   if((mem = kalloc()) == 0)
     return 0;
   memmove(mem, (void*)pa, PGSIZE);
-  uvmunmap(pagetable, va, 1, 1);
+  uvmunmap(pagetable, va, 1, UVMUNMAP_FREE);
   if(mappages(pagetable, va, PGSIZE, (uint64)mem, flags) != 0) {
     decrement_ref(mem);
     return 0;

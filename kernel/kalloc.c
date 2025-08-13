@@ -8,16 +8,12 @@
 #include "spinlock.h"
 #include "riscv.h"
 #include "defs.h"
+#include "kalloc.h"
 
 void freerange_on_kinit(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
-
-struct user_physical_page_ref {
-  uint32 ref;
-  struct spinlock lock;
-};
 
 // Total number of physical pages in the system
 #define TOTAL_PAGES ((PHYSTOP - KERNBASE) / PGSIZE)
@@ -125,6 +121,35 @@ decrement_ref(void *pa)
   
   if (ref == 0)
     kfree(pa);
+}
+
+void
+decrement_ref_withheld_lock(void *pa)
+{
+  uint32 ref;
+  int idx;
+
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("decrement_ref_withheld_lock");
+
+  idx = PA_TO_INDEX(pa);
+  if (user_physical_page_refs[idx].ref == 0) 
+    panic("decrement_ref_withheld_lock: ref is 0");
+  ref = user_physical_page_refs[idx].ref--;
+  
+  if (ref == 0)
+    kfree(pa);
+}
+
+struct user_physical_page_ref *
+get_user_physical_page_ref_locked(void *pa)
+{
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("get_user_physical_page_ref_locked");
+
+  int idx = PA_TO_INDEX(pa);
+  acquire(&user_physical_page_refs[idx].lock);
+  return &user_physical_page_refs[idx];
 }
 
 // Allocate one 4096-byte page of physical memory.

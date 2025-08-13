@@ -58,8 +58,11 @@ void            itrunc(struct inode*);
 void*           kalloc(void);
 uint32          increment_ref(void *pa);
 void            decrement_ref(void *);
+void            decrement_ref_withheld_lock(void *);
 void            kinit(void);
 void            print_physical_page_refs(void);
+struct user_physical_page_ref *
+                get_user_physical_page_ref_locked(void *pa);
 
 // log.c
 void            initlog(int, struct superblock*);
@@ -160,6 +163,12 @@ void            uartputc_sync(int);
 int             uartgetc(void);
 
 // vm.c
+enum uvmunmap_free_mode {
+  UVMUNMAP_NO_FREE = 0,         // 물리 메모리를 해제하지 않음
+  UVMUNMAP_FREE = 1,            // 일반적인 해제 (decrement_ref 호출)
+  UVMUNMAP_FREE_WITHHELD = 2    // withheld lock을 고려한 해제 (decrement_ref_withheld_lock 호출)
+};
+
 void            kvminit(void);
 void            kvminithart(void);
 void            kvmmap(pagetable_t, uint64, uint64, uint64, int);
@@ -170,7 +179,7 @@ uint64          uvmdealloc(pagetable_t, uint64, uint64);
 int             uvmcopy(pagetable_t, pagetable_t, uint64);
 int             uvmcopy_cow(pagetable_t, pagetable_t, uint64);
 void            uvmfree(pagetable_t, uint64);
-void            uvmunmap(pagetable_t, uint64, uint64, int);
+void            uvmunmap(pagetable_t, uint64, uint64, enum uvmunmap_free_mode);
 void            uvmclear(pagetable_t, uint64);
 pte_t *         walk(pagetable_t, uint64, int);
 uint64          walkaddr(pagetable_t, uint64);
