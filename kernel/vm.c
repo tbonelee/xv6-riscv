@@ -328,6 +328,52 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   return -1;
 }
 
+// CoW 방식으로 uvmcopy 함수 구현
+int
+uvmcopy_cow(pagetable_t old, pagetable_t new, uint64 sz)
+{
+  pte_t *pte;
+  uint64 pa, va;
+  uint flags;
+  char *mem;
+
+  // invalid한 첫 페이지는 제외
+  for(va = USERVASTART; va < sz; va += PGSIZE){
+    if((pte = walk(old, va, 0)) == 0)
+      continue;   // page table entry hasn't been allocated
+    if((*pte & PTE_V) == 0)
+      continue;   // physical page hasn't been allocated
+
+    flags = PTE_FLAGS(*pte);
+    if(flags & PTE_W)
+      flags |= PTE_RSW0; // 기존에 writable이었던 CoW 페이지에 대해서는 이 플래그를 설정
+    flags &= ~PTE_W; // writable 플래그 제거
+
+    pa = PTE2PA(*pte);
+
+    // 자식 프로세스의 페이지 테이블에 매핑한 후,
+    // 성공하면 참조 카운트 증가
+    if(mappages(new, va, PGSIZE, pa, flags) != 0)
+      goto err;
+    increment_ref((void*)pa);
+
+    // 부모 프로세스의 페이지 테이블에서 기존 플래그 버전의 페이지 맵핑 제거
+    // 자식 프로세스에 먼저 맵핑하여 참조 카운트 증가시킨 후 호출해야,
+    // 참조 카운트가 0이 되어 물리 메모리가 해제되는 것을 방지할 수 있다.
+    uvmunmap(old, va, 1, 1);
+
+    // 부모 프로세스의 페이지 테이블에 새 플래그 버전의 페이지 맵핑
+    if(mappages(old, va, PGSIZE, pa, flags) != 0)
+      goto err;
+  }
+  return 0;
+
+ // 중도 실패 시 맵핑 성공한 자식 프로세스의 페이지 테이블 맵핑 제거
+ err:
+  uvmunmap(new, USERVASTART, (va - USERVASTART) / PGSIZE, 1);
+  return -1;
+}
+
 // mark a PTE invalid for user access.
 // used by exec for the user stack guard page.
 void
