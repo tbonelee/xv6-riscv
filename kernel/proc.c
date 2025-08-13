@@ -313,7 +313,7 @@ set_pages_readonly(uint64 va, uint64 npages) {
     // a는 이미 PGSIZE로 정렬되어 있으므로 PGROUNDDOWN(a)와 동일
     pa0 = walkaddr(p->pagetable, a);
     if(pa0 == 0) {
-      if(vmfault(p->pagetable, a) == 0) {
+      if(vmfault(p->pagetable, a, 0) == 0) {
         return -1;
       }
     }
@@ -357,7 +357,7 @@ set_pages_readwrite(uint64 va, uint64 npages) {
     // a는 이미 PGSIZE로 정렬되어 있으므로 PGROUNDDOWN(a)와 동일
     pa0 = walkaddr(p->pagetable, a);
     if(pa0 == 0) {
-      if(vmfault(p->pagetable, a) == 0) {
+      if(vmfault(p->pagetable, a, 0) == 0) {
         return -1;
       }
     }

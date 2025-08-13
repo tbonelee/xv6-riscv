@@ -402,7 +402,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0) {
-      if((pa0 = vmfault(pagetable, va0)) == 0) {
+      if((pa0 = vmfault(pagetable, va0, 0)) == 0) {
         return -1;
       }
     }
@@ -436,7 +436,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     va0 = PGROUNDDOWN(srcva);
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0) {
-      if((pa0 = vmfault(pagetable, va0)) == 0) {
+      if((pa0 = vmfault(pagetable, va0, 0)) == 0) {
         return -1;
       }
     }
@@ -495,49 +495,9 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   }
 }
 
-// allocate and map user memory if process is referencing a page
-// that was lazily allocated in sys_sbrk().
-// returns 0 if va is invalid or already mapped, or if
-// out of physical memory, and physical address if successful.
-uint64
-vmfault(pagetable_t pagetable, uint64 va)
-{
-  uint64 ka;
-  struct proc *p = myproc();
-  ka = 0;
-
-  if (va < USERVASTART || va >= p->sz)
-    return 0;
-  va = PGROUNDDOWN(va);
-  if(ismapped(pagetable, va)) {
-    return 0;
-  }
-  ka = (uint64) kalloc();
-  if(ka == 0)
-    return 0;
-  memset((void *) ka, 0, PGSIZE);
-  if (mappages(p->pagetable, va, PGSIZE, ka, PTE_W|PTE_U|PTE_R) != 0) {
-    decrement_ref((void *)ka);
-    return 0;
-  }
-  return ka;
-}
-
-int
-ismapped(pagetable_t pagetable, uint64 va)
-{
-  pte_t *pte = walk(pagetable, va, 0);
-  if (pte == 0) {
-    return 0;
-  }
-  if (*pte & PTE_V){
-    return 1;
-  }
-  return 0;
-}
 
 // 기존에 writable한 CoW 페이지에 대해 copy-on-write 수행
-uint64
+static uint64
 cow_vmfault(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
@@ -571,4 +531,45 @@ cow_vmfault(pagetable_t pagetable, uint64 va)
     return 0;
   }
   return (uint64)mem;
+}
+
+// allocate and map user memory if process is referencing a page
+// that was lazily allocated in sys_sbrk().
+// returns 0 if va is invalid or already mapped, or if
+// out of physical memory, and physical address if successful.
+uint64
+vmfault(pagetable_t pagetable, uint64 va, _Bool check_cow)
+{
+  uint64 ka;
+  struct proc *p = myproc();
+  ka = 0;
+
+  if (va < USERVASTART || va >= p->sz)
+    return 0;
+  va = PGROUNDDOWN(va);
+  if(ismapped(pagetable, va)) {
+    return check_cow ? cow_vmfault(pagetable, va) : 0;
+  }
+  ka = (uint64) kalloc();
+  if(ka == 0)
+    return 0;
+  memset((void *) ka, 0, PGSIZE);
+  if (mappages(p->pagetable, va, PGSIZE, ka, PTE_W|PTE_U|PTE_R) != 0) {
+    decrement_ref((void *)ka);
+    return 0;
+  }
+  return ka;
+}
+
+int
+ismapped(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte = walk(pagetable, va, 0);
+  if (pte == 0) {
+    return 0;
+  }
+  if (*pte & PTE_V){
+    return 1;
+  }
+  return 0;
 }
