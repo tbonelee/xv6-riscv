@@ -378,10 +378,8 @@ set_pages_readwrite(uint64 va, uint64 npages) {
   return 0;
 }
 
-// Create a new process, copying the parent.
-// Sets up child kernel stack to return as if from fork() system call.
-int
-fork(void)
+static int
+fork_base(_Bool cow)
 {
   int i, pid;
   struct proc *np;
@@ -393,7 +391,9 @@ fork(void)
   }
 
   // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+  if((cow
+    ? uvmcopy_cow(p->pagetable, np->pagetable, p->sz)
+    : uvmcopy(p->pagetable, np->pagetable, p->sz)) < 0){
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -436,6 +436,22 @@ fork(void)
   release(&np->lock);
 
   return pid;
+}
+
+
+// Create a new process, copying the parent.
+// Sets up child kernel stack to return as if from fork() system call.
+int
+fork(void)
+{
+  return fork_base(0);
+}
+
+// Copy-on-write fork.
+int
+vfork(void)
+{
+  return fork_base(1);
 }
 
 // Pass p's abandoned children to init.

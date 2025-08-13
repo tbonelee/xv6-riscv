@@ -41,3 +41,4 @@ entry("settickets");
 entry("getpinfo");
 entry("mprotect");
 entry("munprotect");
+entry("vfork");
