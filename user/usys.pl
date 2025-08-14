@@ -44,3 +44,4 @@ entry("munprotect");
 entry("vfork");
 entry("vmdump");
 entry("refdump");
+entry("freelistcount");

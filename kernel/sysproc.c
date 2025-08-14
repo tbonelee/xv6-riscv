@@ -170,3 +170,9 @@ sys_refdump(void)
   print_physical_page_refs();
   return 0;
 }
+
+uint64
+sys_freelistcount(void)
+{
+  return count_freelist();
+}

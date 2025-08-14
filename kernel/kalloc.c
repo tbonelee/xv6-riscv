@@ -246,3 +246,21 @@ print_physical_page_refs(void)
   printf("-------------------  -----------------------------------  ---------\n");
   printf("Total pages with ref count > 0: %d\n", total_pages_with_refs);
 }
+
+// kmem.freelist에 있는 자유 페이지 수를 반환하는 함수
+int
+count_freelist(void)
+{
+  int count = 0;
+  struct run *r;
+  
+  acquire(&kmem.lock);
+  r = kmem.freelist;
+  while (r) {
+    count++;
+    r = r->next;
+  }
+  release(&kmem.lock);
+  
+  return count;
+}
