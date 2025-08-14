@@ -530,8 +530,6 @@ cow_vmfault(pagetable_t pagetable, uint64 va)
     return 0;
   if((*pte & PTE_V) == 0)
     return 0;
-  if((*pte & PTE_W) == 0)
-    return 0;
 
   if((*pte & PTE_RSW0) == 0)
     return 0;
