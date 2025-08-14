@@ -12,7 +12,10 @@ int
 fetchaddr(uint64 addr, uint64 *ip)
 {
   struct proc *p = myproc();
-  if(addr >= p->sz || addr+sizeof(uint64) > p->sz) // both tests needed, in case of overflow
+  // 1. 무효한 첫 페이지 접근 검사
+  // 2. 페이지 범위 검사 (sz는 첫 페이지를 포함한 프로세스에 할당된 메모리 크기)
+  // 3. 오버플로우 검사 (addr + sizeof(uint64) > p->sz)
+  if(addr < USERVASTART || addr >= p->sz || addr+sizeof(uint64) > p->sz) // both tests needed, in case of overflow
     return -1;
   if(copyin(p->pagetable, (char *)ip, addr, sizeof(*ip)) != 0)
     return -1;
@@ -104,6 +107,8 @@ extern uint64 sys_close(void);
 extern uint64 sys_getreadcount(void);
 extern uint64 sys_settickets(void);
 extern uint64 sys_getpinfo(void);
+extern uint64 sys_mprotect(void);
+extern uint64 sys_munprotect(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -132,6 +137,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_getreadcount]  sys_getreadcount,
 [SYS_settickets]    sys_settickets,
 [SYS_getpinfo]      sys_getpinfo,
+[SYS_mprotect]      sys_mprotect,
+[SYS_munprotect]    sys_munprotect,
 };
 
 void

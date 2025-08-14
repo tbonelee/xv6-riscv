@@ -110,7 +110,7 @@ $U/usys.o : $U/usys.S
 $U/_forktest: $U/forktest.o $(ULIB)
 	# forktest has less library code linked in - needs to be small
 	# in order to be able to max out the proc table.
-	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $U/_forktest $U/forktest.o $U/ulib.o $U/usys.o
+	$(LD) $(LDFLAGS) -N -e main -Ttext 0x1000 -o $U/_forktest $U/forktest.o $U/ulib.o $U/usys.o
 	$(OBJDUMP) -S $U/_forktest > $U/forktest.asm
 
 mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
@@ -142,6 +142,13 @@ UPROGS=\
 	$U/_h0test1\
 	$U/_h0test2\
 	$U/_h2graph\
+	$U/_derefnullread\
+	$U/_derefnullwrite\
+	$U/_testmprot\
+	$U/_testmprotfail\
+	$U/_testmprotfork\
+	$U/_testmun\
+	$U/_testmunfail\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

@@ -378,3 +378,6 @@ typedef uint64 *pagetable_t; // 512 PTEs
 // Sv39, to avoid having to sign-extend virtual addresses
 // that have the high bit set.
 #define MAXVA (1L << (9 + 9 + 9 + 12 - 1))
+
+// 유저 프로세스의 시작 가상 주소
+#define USERVASTART 0x1000

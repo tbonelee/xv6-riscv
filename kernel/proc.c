@@ -290,6 +290,96 @@ shrinkproc(int n)
   return 0;
 }
 
+// 주어진 범위의 페이지를 read-only로 설정
+// 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
+// 성공 시 0을 반환
+int
+set_pages_readonly(uint64 va, uint64 npages) {
+  uint64 a, pa0;
+  pte_t *pte;
+  struct proc *p = myproc();
+
+  if(npages == 0)
+    return -1;
+
+  if((va % PGSIZE) != 0)
+    return -1;
+
+  if(va < USERVASTART || va >= p->sz || va+sizeof(uint64) > p->sz)
+    return -1;
+
+  // 페이지마다 PTE_R은 1, PTE_W는 0으로 설정. 나머지는 변경하지 않음
+  for(a = va; a < va + npages * PGSIZE; a += PGSIZE) {
+    // a는 이미 PGSIZE로 정렬되어 있으므로 PGROUNDDOWN(a)와 동일
+    pa0 = walkaddr(p->pagetable, a);
+    if(pa0 == 0) {
+      // TODO: vmfault()의 `read` 인자는 함수 내부에서 사용되지 않아서 어떤 값을 넣을지 확신이 없음. 메모리 값을 수정하는 것은 아니므로 read == 1로 일단 설정함.
+      if(vmfault(p->pagetable, a, 0) == 0) {
+        return -1;
+      }
+    }
+    pte = walk(p->pagetable, a, 0);
+    if(pte == 0)
+      return -1;
+    // 페이지 엔트리 유효 비트 체크
+    if((*pte & PTE_V) == 0)
+      return -1;
+    // 페이지 엔트리가 유저 페이지 엔트리인지 체크
+    if((*pte & PTE_U) == 0)
+      return -1;
+    *pte = (*pte & ~PTE_W) | PTE_R; // PTE_W는 0으로 설정, PTE_R은 1로 설정
+  }
+  
+  // TLB 무효화
+  sfence_vma();
+  
+  return 0;
+}
+
+// 주어진 범위의 페이지를 read-write로 설정
+// 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
+// 성공 시 0을 반환
+int
+set_pages_readwrite(uint64 va, uint64 npages) {
+  uint64 a, pa0;
+  pte_t *pte;
+  struct proc *p = myproc();
+
+  if(npages == 0)
+    return -1;
+
+  if((va % PGSIZE) != 0)
+    return -1;
+
+  if(va < USERVASTART || va >= p->sz || va+sizeof(uint64) > p->sz)
+    return -1;
+
+  for(a = va; a < va + npages * PGSIZE; a += PGSIZE) {
+    // a는 이미 PGSIZE로 정렬되어 있으므로 PGROUNDDOWN(a)와 동일
+    pa0 = walkaddr(p->pagetable, a);
+    if(pa0 == 0) {
+      // TODO: vmfault()의 `read` 인자는 함수 내부에서 사용되지 않아서 어떤 값을 넣을지 확신이 없음. 메모리 값을 수정하는 것은 아니므로 read == 1로 일단 설정함.
+      if(vmfault(p->pagetable, a, 0) == 0) {
+        return -1;
+      }
+    }
+    pte = walk(p->pagetable, a, 0);
+    if(pte == 0)
+      return -1;
+    if((*pte & PTE_V) == 0)
+      return -1;
+    if((*pte & PTE_U) == 0)
+      return -1;
+    // PTE_R, PTE_W 비트 모두 1로 설정
+    *pte = *pte | PTE_R | PTE_W;
+  }
+  
+  // TLB 무효화
+  sfence_vma();
+  
+  return 0;
+}
+
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
 int
