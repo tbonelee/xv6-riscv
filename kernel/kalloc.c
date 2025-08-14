@@ -189,12 +189,6 @@ dump_freelist(void)
     printf("0x%-13lx   0x%-13lx\n", (uint64)r, (uint64)r->next);
     r = r->next;
     count++;
-    
-    // 무한 루프 방지를 위한 제한
-    if (count > 1000) {
-      printf("... (truncated after 1000 entries)\n");
-      break;
-    }
   }
   
   if (count == 0) {
