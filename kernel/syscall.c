@@ -109,7 +109,6 @@ extern uint64 sys_settickets(void);
 extern uint64 sys_getpinfo(void);
 extern uint64 sys_mprotect(void);
 extern uint64 sys_munprotect(void);
-extern uint64 sys_vfork(void);
 extern uint64 sys_vmdump(void);
 extern uint64 sys_refdump(void);
 extern uint64 sys_freelistcount(void);
@@ -143,7 +142,6 @@ static uint64 (*syscalls[])(void) = {
 [SYS_getpinfo]      sys_getpinfo,
 [SYS_mprotect]      sys_mprotect,
 [SYS_munprotect]    sys_munprotect,
-[SYS_vfork]         sys_vfork,
 [SYS_vmdump]        sys_vmdump,
 [SYS_refdump]       sys_refdump,
 [SYS_freelistcount] sys_freelistcount,

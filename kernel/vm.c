@@ -306,40 +306,9 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 // physical memory.
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
+// CoW 방식
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
-{
-  pte_t *pte;
-  uint64 pa, i;
-  uint flags;
-  char *mem;
-
-  // invalid한 첫 페이지는 제외하고 카피
-  for(i = USERVASTART; i < sz; i += PGSIZE){
-    if((pte = walk(old, i, 0)) == 0)
-      continue;   // page table entry hasn't been allocated
-    if((*pte & PTE_V) == 0)
-      continue;   // physical page hasn't been allocated
-    pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      decrement_ref(mem);
-      goto err;
-    }
-  }
-  return 0;
-
- err:
-  uvmunmap(new, USERVASTART, (i - USERVASTART) / PGSIZE, UVMUNMAP_FREE);
-  return -1;
-}
-
-// CoW 방식으로 uvmcopy 함수 구현
-int
-uvmcopy_cow(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
   uint64 pa, va;

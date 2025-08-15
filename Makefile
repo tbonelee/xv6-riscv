@@ -150,7 +150,6 @@ UPROGS=\
 	$U/_testmun\
 	$U/_testmunfail\
 	$U/_cow_fork\
-	$U/_cow_vfork\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

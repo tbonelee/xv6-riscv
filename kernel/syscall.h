@@ -25,7 +25,6 @@
 #define SYS_getpinfo        24
 #define SYS_mprotect        25
 #define SYS_munprotect      26
-#define SYS_vfork           27
-#define SYS_vmdump          28
-#define SYS_refdump         29
-#define SYS_freelistcount   30
+#define SYS_vmdump          27
+#define SYS_refdump         28
+#define SYS_freelistcount   29
