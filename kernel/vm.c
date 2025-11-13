@@ -334,15 +334,8 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       goto err;
     increment_ref((void*)pa);
 
-    // 부모 프로세스의 페이지 테이블에서 기존 플래그 버전의 페이지 맵핑 제거
-    // 자식 프로세스에 먼저 맵핑하여 참조 카운트 증가시킨 후 호출해야,
-    // 참조 카운트가 0이 되어 물리 메모리가 해제되는 것을 방지할 수 있다.
-    uvmunmap(old, va, 1, UVMUNMAP_FREE);
-
-    // 부모 프로세스의 페이지 테이블에 새 플래그 버전의 페이지 맵핑
-    if(mappages(old, va, PGSIZE, pa, flags) != 0)
-      goto err;
-    increment_ref((void*)pa);
+    // 부모 프로세스의 PTE 플래그 직접 수정
+    *pte = PA2PTE(pa) | flags | PTE_V;
   }
   return 0;
 
