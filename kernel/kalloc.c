@@ -22,32 +22,20 @@ extern char end[]; // first address after kernel.
 #define INDEX_TO_PA(idx) (KERNBASE + (idx * PGSIZE))
 
 // Reference count for each physical page
-struct user_physical_page_ref user_physical_page_refs[TOTAL_PAGES];
-
-void
-physical_page_ref_init()
-{
-  for (int i = 0; i < TOTAL_PAGES; i++) {
-    initlock(&user_physical_page_refs[i].lock, "user_physical_page_ref");
-  }
-}
+_Atomic uint32 user_physical_page_refs[TOTAL_PAGES];
 
 
 // kalloc으로 할당된 페이지를 맵핑하는 경우에만 호출되는 함수
 uint32
 increment_ref(void *pa)
 {
-  uint32 ref;
   int idx;
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("increment_ref");
 
   idx = PA_TO_INDEX(pa);
-  acquire(&user_physical_page_refs[idx].lock);
-  ref = user_physical_page_refs[idx].ref++;
-  release(&user_physical_page_refs[idx].lock);
-  return ref;
+  return __atomic_fetch_add(&user_physical_page_refs[idx], 1, __ATOMIC_SEQ_CST);
 }
 
 struct run {
@@ -95,8 +83,7 @@ freerange_on_kinit(void *pa_start, void *pa_end)
   p = (char*)PGROUNDUP((uint64)pa_start);
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE) {
     kfree(p);
-    initlock(&user_physical_page_refs[PA_TO_INDEX(p)].lock, "user_physical_page_ref");
-    user_physical_page_refs[PA_TO_INDEX(p)].ref = 0;
+    __atomic_store_n(&user_physical_page_refs[PA_TO_INDEX(p)], 0, __ATOMIC_SEQ_CST);
   }
 }
 
@@ -113,12 +100,8 @@ decrement_ref(void *pa)
     panic("decrement_ref");
 
   idx = PA_TO_INDEX(pa);
-  acquire(&user_physical_page_refs[idx].lock);
-  if (user_physical_page_refs[idx].ref == 0) 
-    panic("decrement_ref: ref is 0");
-  ref = --(user_physical_page_refs[idx].ref);
-  release(&user_physical_page_refs[idx].lock);
-  
+  ref = __atomic_sub_fetch(&user_physical_page_refs[idx], 1, __ATOMIC_SEQ_CST);
+
   if (ref == 0)
     kfree(pa);
 }
@@ -184,15 +167,15 @@ print_physical_page_refs(void)
   int total_pages_with_refs = 0;
   
   while (i < TOTAL_PAGES) {
-    uint32 ref = user_physical_page_refs[i].ref;
+    uint32 ref = __atomic_load_n(&user_physical_page_refs[i], __ATOMIC_SEQ_CST);
     
     if (ref > 0) {
       int start_idx = i;
       uint64 start_pa = INDEX_TO_PA(i);
       
       // 같은 참조 카운트를 가진 연속된 페이지들 찾기
-      while (i + 1 < TOTAL_PAGES && 
-             user_physical_page_refs[i + 1].ref == ref) {
+      while (i + 1 < TOTAL_PAGES &&
+             __atomic_load_n(&user_physical_page_refs[i + 1], __ATOMIC_SEQ_CST) == ref) {
         i++;
       }
       
