@@ -180,7 +180,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 // page-aligned. It's OK if the mappings don't exist.
 // Optionally free the physical memory.
 void
-uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, enum uvmunmap_free_mode free_mode)
+uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 {
   uint64 a;
   pte_t *pte;
@@ -193,13 +193,9 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, enum uvmunmap_free_mod
       continue;   
     if((*pte & PTE_V) == 0)  // has physical page been allocated?
       continue;
-    if(free_mode != UVMUNMAP_NO_FREE){
+    if(do_free){
       uint64 pa = PTE2PA(*pte);
-      if(free_mode == UVMUNMAP_FREE) {
-        decrement_ref((void*)pa);
-      } else {
-        panic("uvmunmap: invalid free_mode");
-      }
+      decrement_ref((void*)pa);
     }
     *pte = 0;
   }
@@ -259,7 +255,7 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 
   if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
     int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
-    uvmunmap(pagetable, PGROUNDUP(newsz), npages, UVMUNMAP_FREE);
+    uvmunmap(pagetable, PGROUNDUP(newsz), npages, 1);
   }
 
   return newsz;
@@ -294,7 +290,7 @@ uvmfree(pagetable_t pagetable, uint64 sz)
   // p->sz에서 할당된 메모리를 계산하여 해제
   // 이 때 첫 페이지(0 ~ USRVASTART)는 비워져 있으므로 1을 뺀 값이 npages로 할당되어 uvmunmap 호출
   if(sz > USERVASTART)
-    uvmunmap(pagetable, USERVASTART, PGROUNDUP(sz)/PGSIZE  - 1, UVMUNMAP_FREE);
+    uvmunmap(pagetable, USERVASTART, PGROUNDUP(sz)/PGSIZE  - 1, 1);
   freewalk(pagetable);
 }
 
@@ -339,7 +335,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
  // 중도 실패 시 맵핑 성공한 자식 프로세스의 페이지 테이블 맵핑 제거
  err:
-  uvmunmap(new, USERVASTART, (va - USERVASTART) / PGSIZE, UVMUNMAP_FREE);
+  uvmunmap(new, USERVASTART, (va - USERVASTART) / PGSIZE, 1);
   return -1;
 }
 
@@ -500,7 +496,7 @@ cow_vmfault(pagetable_t pagetable, uint64 va)
   if((mem = kalloc()) == 0)
     return 0;
   memmove(mem, (void*)pa, PGSIZE);
-  uvmunmap(pagetable, va, 1, UVMUNMAP_FREE);
+  uvmunmap(pagetable, va, 1, 1);
   if(mappages(pagetable, va, PGSIZE, (uint64)mem, flags) != 0) {
     decrement_ref(mem);
     return 0;

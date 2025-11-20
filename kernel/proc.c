@@ -235,7 +235,7 @@ proc_pagetable(struct proc *p)
   // trampoline.S.
   if(mappages(pagetable, TRAPFRAME, PGSIZE,
               (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
-    uvmunmap(pagetable, TRAMPOLINE, 1, UVMUNMAP_NO_FREE);
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
     uvmfree(pagetable, 0);
     return 0;
   }
@@ -248,8 +248,8 @@ proc_pagetable(struct proc *p)
 void
 proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
-  uvmunmap(pagetable, TRAMPOLINE, 1, UVMUNMAP_NO_FREE);
-  uvmunmap(pagetable, TRAPFRAME, 1, UVMUNMAP_NO_FREE);
+  uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+  uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
 }
 
@@ -364,7 +364,7 @@ set_pages_writeflag(uint64 va, uint64 npages, _Bool is_writable) {
         return -1;
       }
       memmove(mem, (void *)pa0, PGSIZE);
-      uvmunmap(p->pagetable, a, 1, UVMUNMAP_FREE);
+      uvmunmap(p->pagetable, a, 1, 1);
       if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, flags) != 0) {
         decrement_ref(mem);
         return -1;
