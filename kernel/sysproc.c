@@ -137,7 +137,7 @@ sys_mprotect(void)
 
   argaddr(0, &addr);
   argaddr(1, &npages);
-  return set_pages_readonly(addr, npages);
+  return set_pages_writeflag(addr, npages, 0);
 }
 
 uint64
@@ -148,5 +148,25 @@ sys_munprotect(void)
 
   argaddr(0, &addr);
   argaddr(1, &npages);
-  return set_pages_readwrite(addr, npages);
+  return set_pages_writeflag(addr, npages, 1);
+}
+
+uint64
+sys_vmdump(void)
+{
+  vmdump();
+  return 0;
+}
+
+uint64
+sys_refdump(void)
+{
+  print_physical_page_refs();
+  return 0;
+}
+
+uint64
+sys_freelistcount(void)
+{
+  return count_freelist();
 }

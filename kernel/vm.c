@@ -17,6 +17,9 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+static uint64
+cow_vmfault(pagetable_t pagetable, uint64 va);
+
 // Make a direct-map page table for the kernel.
 pagetable_t
 kvmmake(void)
@@ -192,7 +195,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       continue;
     if(do_free){
       uint64 pa = PTE2PA(*pte);
-      kfree((void*)pa);
+      decrement_ref((void*)pa);
     }
     *pte = 0;
   }
@@ -231,7 +234,8 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
     }
     memset(mem, 0, PGSIZE);
     if(mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_R|PTE_U|xperm) != 0){
-      kfree(mem);
+      // mappages할당 실패했으므로 decrement_ref 호출 필요 없음
+      decrement_ref(mem);
       uvmdealloc(pagetable, a, oldsz);
       return 0;
     }
@@ -263,8 +267,7 @@ void
 freewalk(pagetable_t pagetable)
 {
   // there are 2^9 = 512 PTEs in a page table.
-  // 첫 페이지는 invalid한 페이지이므로 스킵하여 i == 1부터 시작
-  for(int i = 1; i < 512; i++){
+  for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
     if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
       // this PTE points to a lower-level page table.
@@ -275,7 +278,7 @@ freewalk(pagetable_t pagetable)
       panic("freewalk: leaf");
     }
   }
-  kfree((void*)pagetable);
+  decrement_ref((void*)pagetable);
 }
 
 // Free user memory pages,
@@ -297,34 +300,42 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 // physical memory.
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
+// CoW 방식
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
-  uint64 pa, i;
+  uint64 pa, va;
   uint flags;
-  char *mem;
 
-  // invalid한 첫 페이지는 제외하고 카피
-  for(i = USERVASTART; i < sz; i += PGSIZE){
-    if((pte = walk(old, i, 0)) == 0)
+  // invalid한 첫 페이지는 제외
+  for(va = USERVASTART; va < sz; va += PGSIZE){
+    if((pte = walk(old, va, 0)) == 0)
       continue;   // page table entry hasn't been allocated
     if((*pte & PTE_V) == 0)
       continue;   // physical page hasn't been allocated
-    pa = PTE2PA(*pte);
+
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
+    if(flags & PTE_W)
+      flags |= PTE_RSW0; // 기존에 writable이었던 CoW 페이지에 대해서는 이 플래그를 설정
+    flags &= ~PTE_W; // writable 플래그 제거
+
+    pa = PTE2PA(*pte);
+
+    // 자식 프로세스의 페이지 테이블에 매핑한 후,
+    // 성공하면 참조 카운트 증가
+    if(mappages(new, va, PGSIZE, pa, flags) != 0)
       goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      goto err;
-    }
+    increment_ref((void*)pa);
+
+    // 부모 프로세스의 PTE 플래그 직접 수정
+    *pte = PA2PTE(pa) | flags | PTE_V;
   }
   return 0;
 
+ // 중도 실패 시 맵핑 성공한 자식 프로세스의 페이지 테이블 맵핑 제거
  err:
-  uvmunmap(new, USERVASTART, (i - USERVASTART) / PGSIZE, 1);
+  uvmunmap(new, USERVASTART, (va - USERVASTART) / PGSIZE, 1);
   return -1;
 }
 
@@ -364,8 +375,15 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
     pte = walk(pagetable, va0, 0);
     // forbid copyout over read-only user text pages.
-    if((*pte & PTE_W) == 0)
-      return -1;
+    if((*pte & PTE_W) == 0) {
+      if(cow_vmfault(pagetable, va0) == 0) {
+        return -1;
+      }
+      pte = walk(pagetable, va0, 0);
+      if((*pte & PTE_W) == 0) {
+        return -1;
+      }
+    }
       
     n = PGSIZE - (dstva - va0);
     if(n > len)
@@ -450,12 +468,48 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   }
 }
 
+
+// 기존에 writable한 CoW 페이지에 대해 copy-on-write 수행
+static uint64
+cow_vmfault(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte;
+  uint64 pa;
+  uint flags;
+  struct proc *p = myproc();
+  void *mem;
+
+  if(va < USERVASTART || va >= p->sz)
+    return 0;
+  va = PGROUNDDOWN(va);
+  if((pte = walk(pagetable, va, 0)) == 0)
+    return 0;
+  if((*pte & PTE_V) == 0)
+    return 0;
+
+  if((*pte & PTE_RSW0) == 0)
+    return 0;
+
+  pa = PTE2PA(*pte);
+  flags = (PTE_FLAGS(*pte) & ~PTE_RSW0) | PTE_W;
+
+  if((mem = kalloc()) == 0)
+    return 0;
+  memmove(mem, (void*)pa, PGSIZE);
+  uvmunmap(pagetable, va, 1, 1);
+  if(mappages(pagetable, va, PGSIZE, (uint64)mem, flags) != 0) {
+    decrement_ref(mem);
+    return 0;
+  }
+  return (uint64)mem;
+}
+
 // allocate and map user memory if process is referencing a page
 // that was lazily allocated in sys_sbrk().
 // returns 0 if va is invalid or already mapped, or if
 // out of physical memory, and physical address if successful.
 uint64
-vmfault(pagetable_t pagetable, uint64 va, int read)
+vmfault(pagetable_t pagetable, uint64 va, _Bool check_cow)
 {
   uint64 ka;
   struct proc *p = myproc();
@@ -465,14 +519,14 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
     return 0;
   va = PGROUNDDOWN(va);
   if(ismapped(pagetable, va)) {
-    return 0;
+    return check_cow ? cow_vmfault(pagetable, va) : 0;
   }
   ka = (uint64) kalloc();
   if(ka == 0)
     return 0;
   memset((void *) ka, 0, PGSIZE);
   if (mappages(p->pagetable, va, PGSIZE, ka, PTE_W|PTE_U|PTE_R) != 0) {
-    kfree((void *)ka);
+    decrement_ref((void *)ka);
     return 0;
   }
   return ka;

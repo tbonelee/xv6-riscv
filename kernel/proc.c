@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 #include "pstat.h"
+#include "kalloc.h"
 
 #define MAX_TICKETS 10000
 
@@ -159,7 +160,7 @@ static void
 freeproc(struct proc *p)
 {
   if(p->trapframe)
-    kfree((void*)p->trapframe);
+    decrement_ref((void*)p->trapframe);
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
@@ -290,13 +291,24 @@ shrinkproc(int n)
   return 0;
 }
 
-// 주어진 범위의 페이지를 read-only로 설정
+// 주어진 범위의 페이지에 지정된 쓰기 가능 여부 플래그를 설정
 // 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
 // 성공 시 0을 반환
+//
+// Invariant 0 : 모든 페이지는 read 가능하다. (`PROT_NONE`을 허용하게 되면 Invariant 깨지므로 구현을 수정해야 함)
+// Invariant 1 : 모든 페이지는 private mapping이다. (공유 메모리 없음. CoW)
+// Invariant 2 : 모든 페이지의 레퍼런스 카운터는 1 이상이다. (decrement하는 곳에서 0이 되는 경우 물리 메모리를 해제하므로)
+// Invariant 3 : ref > 1인 private page를 가리키는 모든 PTE에는 쓰기 가능 플래그가 설정되어 있지 않아야 한다.
+//              (ref > 1인 페이지에 쓰기 가능 플래그를 설정할 때는 CoW를 수행하여 ref == 1인 새로운 페이지를 할당하므로, 이 조건이 유지됨)
+//              (Invariant 3을 지키기 위해서는 uvmcopy에 writable한 페이지를 받으면 무조건 새 페이지를 할당해줘야 함)
+//
+//
 int
-set_pages_readonly(uint64 va, uint64 npages) {
+set_pages_writeflag(uint64 va, uint64 npages, _Bool is_writable) {
   uint64 a, pa0;
+  uint flags;
   pte_t *pte;
+  void *mem;
   struct proc *p = myproc();
 
   if(npages == 0)
@@ -308,13 +320,11 @@ set_pages_readonly(uint64 va, uint64 npages) {
   if(va < USERVASTART || va >= p->sz || va+sizeof(uint64) > p->sz)
     return -1;
 
-  // 페이지마다 PTE_R은 1, PTE_W는 0으로 설정. 나머지는 변경하지 않음
   for(a = va; a < va + npages * PGSIZE; a += PGSIZE) {
     // a는 이미 PGSIZE로 정렬되어 있으므로 PGROUNDDOWN(a)와 동일
     pa0 = walkaddr(p->pagetable, a);
     if(pa0 == 0) {
-      // TODO: vmfault()의 `read` 인자는 함수 내부에서 사용되지 않아서 어떤 값을 넣을지 확신이 없음. 메모리 값을 수정하는 것은 아니므로 read == 1로 일단 설정함.
-      if(vmfault(p->pagetable, a, 0) == 0) {
+      if((pa0 = vmfault(p->pagetable, a, 0)) == 0) {
         return -1;
       }
     }
@@ -327,51 +337,40 @@ set_pages_readonly(uint64 va, uint64 npages) {
     // 페이지 엔트리가 유저 페이지 엔트리인지 체크
     if((*pte & PTE_U) == 0)
       return -1;
-    *pte = (*pte & ~PTE_W) | PTE_R; // PTE_W는 0으로 설정, PTE_R은 1로 설정
-  }
-  
-  // TLB 무효화
-  sfence_vma();
-  
-  return 0;
-}
 
-// 주어진 범위의 페이지를 read-write로 설정
-// 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
-// 성공 시 0을 반환
-int
-set_pages_readwrite(uint64 va, uint64 npages) {
-  uint64 a, pa0;
-  pte_t *pte;
-  struct proc *p = myproc();
+    if ((PTE_FLAGS(*pte) & PTE_W)) {
+      // 이 블럭 안은 Invariant 3에 의해 ref == 1
+      if (is_writable) continue;
 
-  if(npages == 0)
-    return -1;
+      // xv6는 멀티 스레드를 지원하지 않으므로 race 발생하지 않음
 
-  if((va % PGSIZE) != 0)
-    return -1;
+      // readwrite -> readonly
+      *pte = (*pte & ~PTE_W);
+    } else {
+      if (!is_writable) continue;
 
-  if(va < USERVASTART || va >= p->sz || va+sizeof(uint64) > p->sz)
-    return -1;
+      // 이 사이에 readwrite로 바뀌게 될 가능성?
+      // -> xv6는 멀티 스레드 지원하지 않으므로 고려하지 않아도 됨.
+      //    멀티 프로세스를 고려하더라도,
+      //      동일한 물리 메모리를 참조하는 프로세스에서 readwrite로 바꾸더라도 동 프로세스의 PTE에는 영향 x
 
-  for(a = va; a < va + npages * PGSIZE; a += PGSIZE) {
-    // a는 이미 PGSIZE로 정렬되어 있으므로 PGROUNDDOWN(a)와 동일
-    pa0 = walkaddr(p->pagetable, a);
-    if(pa0 == 0) {
-      // TODO: vmfault()의 `read` 인자는 함수 내부에서 사용되지 않아서 어떤 값을 넣을지 확신이 없음. 메모리 값을 수정하는 것은 아니므로 read == 1로 일단 설정함.
-      if(vmfault(p->pagetable, a, 0) == 0) {
+      // readonly -> readwrite
+      // (PTE_RSW0는 메모리 공유하면서 write 플래그를 끌 때 기존에 writable했는지 기록하기 위해 사용했음.
+      //   하지만 여기서는 writable하게 수정하므로 PTE_RSW0 초기화해도 무방)
+      flags = (PTE_FLAGS(*pte) & ~PTE_RSW0) | PTE_W;
+
+      if ((mem = kalloc()) == 0) {
         return -1;
       }
+      memmove(mem, (void *)pa0, PGSIZE);
+      uvmunmap(p->pagetable, a, 1, 1);
+      if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, flags) != 0) {
+        decrement_ref(mem);
+        return -1;
+      }
+
+      decrement_ref((void *)pa0);
     }
-    pte = walk(p->pagetable, a, 0);
-    if(pte == 0)
-      return -1;
-    if((*pte & PTE_V) == 0)
-      return -1;
-    if((*pte & PTE_U) == 0)
-      return -1;
-    // PTE_R, PTE_W 비트 모두 1로 설정
-    *pte = *pte | PTE_R | PTE_W;
   }
   
   // TLB 무효화
@@ -382,6 +381,7 @@ set_pages_readwrite(uint64 va, uint64 npages) {
 
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
+// Copy-on-write.
 int
 fork(void)
 {
@@ -439,6 +439,8 @@ fork(void)
 
   return pid;
 }
+
+
 
 // Pass p's abandoned children to init.
 // Caller must hold wait_lock.
@@ -826,6 +828,67 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+static _Bool is_invalid_pte(pte_t pte) { return (pte & PTE_V) == 0; }
+static uint64 idx_to_va(int i2, int i1, int i0) {
+  return
+    ((uint64)i2 << (PGSHIFT + 2*9)) |
+    ((uint64)i1 << (PGSHIFT + 1*9)) |
+    ((uint64)i0 << (PGSHIFT + 0*9));
+}
+
+// For each all processes, iterate through their pagetables according to
+// Sv39 scheme and print out all valid pages, for debugging.
+//
+// Runs when user types ^V on console.
+// No lock to avoid wedging a stuck machine further.
+void
+vmdump(void)
+{
+  printf("\n\n");
+  for (struct proc *p = proc; p < &proc[NPROC]; ++p) {
+    if (p->state == UNUSED) { continue; }
+    printf("* pid = %d (\"%s\")\n", p->pid, p->name);
+    if (p->pagetable == 0) { printf("(no pagetable found)\n"); continue; }
+
+    printf(
+      "   PTE index      virtual     physical    flags\n"
+      "  LV2 LV1 LV0     address     address    DAGUXWRV\n"
+      "  -----------  ------------  ----------  --------\n"
+    );
+
+    // Level 2
+    pagetable_t pt2 = p->pagetable;
+    for (int i2 = 0; i2 < 512; ++i2) {
+      pte_t pte = pt2[i2];
+      if (is_invalid_pte(pte)) { continue; }
+      // NOTE: xv6 does not support superpages, so we won't handle it
+
+      // Level 1
+      pagetable_t pt1 = (pagetable_t)PTE2PA(pte);
+      for (int i1 = 0; i1 < 512; ++i1) {
+        pte_t pte = pt1[i1];
+        if (is_invalid_pte(pte)) { continue; }
+        // NOTE: xv6 does not support superpages, so we won't handle it
+
+        // Level 0
+        pagetable_t pt0 = (pagetable_t)PTE2PA(pte);
+        for (int i0 = 0; i0 < 512; ++i0) {
+          pte_t pte = pt0[i0];
+          if (is_invalid_pte(pte)) { continue; }
+
+          printf("  %03u %03u %03u  \x1b[90m0x\x1b[0m%010lx  \x1b[90m0x\x1b[0m%08lx  %08lb\n",
+            i2, i1, i0,
+            idx_to_va(i2, i1, i0),
+            PTE2PA(pte),
+            PTE_FLAGS(pte));
+        }
+      }
+    }
+    printf("\n");
+  }
+  printf("\n");
 }
 
 int

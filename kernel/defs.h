@@ -56,8 +56,12 @@ void            itrunc(struct inode*);
 
 // kalloc.c
 void*           kalloc(void);
-void            kfree(void *);
+void            increment_ref(void *pa);
+void            decrement_ref(void *);
 void            kinit(void);
+void            dump_freelist(void);
+void            print_physical_page_refs(void);
+int             count_freelist(void);
 
 // log.c
 void            initlog(int, struct superblock*);
@@ -81,8 +85,7 @@ int             cpuid(void);
 void            exit(int);
 int             fork(void);
 int             shrinkproc(int);
-int             set_pages_readonly(uint64 va, uint64 npages);
-int             set_pages_readwrite(uint64 va, uint64 npages);
+int             set_pages_writeflag(uint64 va, uint64 npages, _Bool is_writable);
 void            proc_mapstacks(pagetable_t);
 pagetable_t     proc_pagetable(struct proc *);
 void            proc_freepagetable(pagetable_t, uint64);
@@ -103,6 +106,7 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
+void            vmdump(void);
 int             getpinfo(uint64 addr);
 int             mprotect(void *addr, uint64 npages);
 int             munprotect(void *addr, uint64 npages);
@@ -155,7 +159,6 @@ void            uartputc(int);
 void            uartputc_sync(int);
 int             uartgetc(void);
 
-// vm.c
 void            kvminit(void);
 void            kvminithart(void);
 void            kvmmap(pagetable_t, uint64, uint64, uint64, int);
@@ -173,7 +176,7 @@ int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 int             ismapped(pagetable_t, uint64);
-uint64          vmfault(pagetable_t, uint64, int);
+uint64          vmfault(pagetable_t, uint64, _Bool);
 
 // plic.c
 void            plicinit(void);

@@ -28,6 +28,9 @@ int settickets(uint32);
 int getpinfo(struct pstat*);
 int mprotect(void*, uint64);
 int munprotect(void*, uint64);
+int vmdump(void);
+int refdump(void);
+int freelistcount(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

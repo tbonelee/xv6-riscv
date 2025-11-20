@@ -149,6 +149,7 @@ UPROGS=\
 	$U/_testmprotfork\
 	$U/_testmun\
 	$U/_testmunfail\
+	$U/_cow_fork\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

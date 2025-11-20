@@ -41,3 +41,6 @@ entry("settickets");
 entry("getpinfo");
 entry("mprotect");
 entry("munprotect");
+entry("vmdump");
+entry("refdump");
+entry("freelistcount");
