@@ -56,7 +56,7 @@ void            itrunc(struct inode*);
 
 // kalloc.c
 void*           kalloc(void);
-uint32          increment_ref(void *pa);
+void            increment_ref(void *pa);
 void            decrement_ref(void *);
 void            kinit(void);
 void            dump_freelist(void);

@@ -26,7 +26,7 @@ _Atomic uint32 user_physical_page_refs[TOTAL_PAGES];
 
 
 // kalloc으로 할당된 페이지를 맵핑하는 경우에만 호출되는 함수
-uint32
+void
 increment_ref(void *pa)
 {
   int idx;
@@ -35,7 +35,7 @@ increment_ref(void *pa)
     panic("increment_ref");
 
   idx = PA_TO_INDEX(pa);
-  return __atomic_fetch_add(&user_physical_page_refs[idx], 1, __ATOMIC_SEQ_CST);
+  __atomic_fetch_add(&user_physical_page_refs[idx], 1, __ATOMIC_SEQ_CST);
 }
 
 struct run {
