@@ -308,7 +308,6 @@ set_pages_writeflag(uint64 va, uint64 npages, _Bool is_writable) {
   uint64 a, pa0;
   uint flags;
   pte_t *pte;
-  struct user_physical_page_ref *page_ref;
   void *mem;
   struct proc *p = myproc();
 
