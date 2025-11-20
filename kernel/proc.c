@@ -357,7 +357,7 @@ set_pages_writeflag(uint64 va, uint64 npages, _Bool is_writable) {
       // readonly -> readwrite
       // (PTE_RSW0는 메모리 공유하면서 write 플래그를 끌 때 기존에 writable했는지 기록하기 위해 사용했음.
       //   하지만 여기서는 writable하게 수정하므로 PTE_RSW0 초기화해도 무방)
-      flags = PTE_FLAGS(*pte) & ~PTE_RSW0 | PTE_W;
+      flags = (PTE_FLAGS(*pte) & ~PTE_RSW0) | PTE_W;
 
       if ((mem = kalloc()) == 0) {
         return -1;
