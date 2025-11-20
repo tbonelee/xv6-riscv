@@ -123,24 +123,6 @@ decrement_ref(void *pa)
     kfree(pa);
 }
 
-void
-decrement_ref_withheld_lock(void *pa)
-{
-  uint32 ref;
-  int idx;
-
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
-    panic("decrement_ref_withheld_lock");
-
-  idx = PA_TO_INDEX(pa);
-  if (user_physical_page_refs[idx].ref == 0) 
-    panic("decrement_ref_withheld_lock: ref is 0");
-  ref = user_physical_page_refs[idx].ref--;
-  
-  if (ref == 0)
-    kfree(pa);
-}
-
 struct user_physical_page_ref *
 get_user_physical_page_ref_locked(void *pa)
 {

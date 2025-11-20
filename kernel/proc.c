@@ -291,11 +291,20 @@ shrinkproc(int n)
   return 0;
 }
 
-// 주어진 범위의 페이지에 지정된 플래그를 설정
+// 주어진 범위의 페이지에 지정된 쓰기 가능 여부 플래그를 설정
 // 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
 // 성공 시 0을 반환
-static int
-set_pages_flag(uint64 va, uint64 npages, uint64 clear_mask, uint64 set_mask) {
+//
+// Invariant 0 : 모든 페이지는 read 가능하다. (`PROT_NONE`을 허용하게 되면 Invariant 깨지므로 구현을 수정해야 함)
+// Invariant 1 : 모든 페이지는 private mapping이다. (공유 메모리 없음. CoW)
+// Invariant 2 : 모든 페이지의 레퍼런스 카운터는 1 이상이다. (decrement하는 곳에서 0이 되는 경우 물리 메모리를 해제하므로)
+// Invariant 3 : ref > 1인 private page를 가리키는 모든 PTE에는 쓰기 가능 플래그가 설정되어 있지 않아야 한다.
+//              (ref > 1인 페이지에 쓰기 가능 플래그를 설정할 때는 CoW를 수행하여 ref == 1인 새로운 페이지를 할당하므로, 이 조건이 유지됨)
+//              (Invariant 3을 지키기 위해서는 uvmcopy에 writable한 페이지를 받으면 무조건 새 페이지를 할당해줘야 함)
+//
+//
+int
+set_pages_writeflag(uint64 va, uint64 npages, _Bool is_writable) {
   uint64 a, pa0;
   uint flags;
   pte_t *pte;
@@ -330,51 +339,45 @@ set_pages_flag(uint64 va, uint64 npages, uint64 clear_mask, uint64 set_mask) {
     if((*pte & PTE_U) == 0)
       return -1;
 
-    // CoW로 공유된 페이지이면 먼저 복사 후 시도
-    page_ref = get_user_physical_page_ref_locked((void *)pa0);
-    if(page_ref->ref > 1) {
-      flags = PTE_FLAGS(*pte) & ~PTE_RSW0;
-      if (*pte & PTE_RSW0)
-        flags |= PTE_W;
+    if ((PTE_FLAGS(*pte) & PTE_W)) {
+      // 이 블럭 안은 Invariant 3에 의해 ref == 1
+      if (is_writable) continue;
 
-      if((mem = kalloc()) == 0) {
-        release(&page_ref->lock);
+      // xv6는 멀티 스레드를 지원하지 않으므로 race 발생하지 않음
+
+      // readwrite -> readonly
+      *pte = (*pte & ~PTE_W);
+    } else {
+      if (!is_writable) continue;
+
+      // 이 사이에 readwrite로 바뀌게 될 가능성?
+      // -> xv6는 멀티 스레드 지원하지 않으므로 고려하지 않아도 됨.
+      //    멀티 프로세스를 고려하더라도,
+      //      동일한 물리 메모리를 참조하는 프로세스에서 readwrite로 바꾸더라도 동 프로세스의 PTE에는 영향 x
+
+      // readonly -> readwrite
+      // (PTE_RSW0는 메모리 공유하면서 write 플래그를 끌 때 기존에 writable했는지 기록하기 위해 사용했음.
+      //   하지만 여기서는 writable하게 수정하므로 PTE_RSW0 초기화해도 무방)
+      flags = PTE_FLAGS(*pte) & ~PTE_RSW0 | PTE_W;
+
+      if ((mem = kalloc()) == 0) {
         return -1;
       }
       memmove(mem, (void *)pa0, PGSIZE);
-      // 락을 잡은 상태로 물리 메모리를 해제해야 하므로 UVMUNMAP_FREE_WITHHELD 사용
-      uvmunmap(p->pagetable, a, 1, UVMUNMAP_FREE_WITHHELD);
-      if(mappages(p->pagetable, a, PGSIZE, (uint64)mem, flags) != 0) {
+      uvmunmap(p->pagetable, a, 1, UVMUNMAP_FREE);
+      if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, flags) != 0) {
         decrement_ref(mem);
-        release(&page_ref->lock);
         return -1;
       }
-    }
-    release(&page_ref->lock);
 
-    *pte = (*pte & ~clear_mask) | set_mask;
+      decrement_ref((void *)pa0);
+    }
   }
   
   // TLB 무효화
   sfence_vma();
   
   return 0;
-}
-
-// 주어진 범위의 페이지를 read-only로 설정
-// 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
-// 성공 시 0을 반환
-int
-set_pages_readonly(uint64 va, uint64 npages) {
-  return set_pages_flag(va, npages, PTE_W, PTE_R);
-}
-
-// 주어진 범위의 페이지를 read-write로 설정
-// 페이지가 정렬되어 있지 않거나, 할당되지 않은 경우 -1을 반환
-// 성공 시 0을 반환
-int
-set_pages_readwrite(uint64 va, uint64 npages) {
-  return set_pages_flag(va, npages, 0, PTE_R | PTE_W);
 }
 
 // Create a new process, copying the parent.

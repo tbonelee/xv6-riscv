@@ -197,8 +197,6 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, enum uvmunmap_free_mod
       uint64 pa = PTE2PA(*pte);
       if(free_mode == UVMUNMAP_FREE) {
         decrement_ref((void*)pa);
-      } else if(free_mode == UVMUNMAP_FREE_WITHHELD) {
-        decrement_ref_withheld_lock((void*)pa);
       } else {
         panic("uvmunmap: invalid free_mode");
       }

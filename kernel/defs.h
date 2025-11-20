@@ -58,7 +58,6 @@ void            itrunc(struct inode*);
 void*           kalloc(void);
 uint32          increment_ref(void *pa);
 void            decrement_ref(void *);
-void            decrement_ref_withheld_lock(void *);
 void            kinit(void);
 void            dump_freelist(void);
 void            print_physical_page_refs(void);
@@ -88,8 +87,7 @@ int             cpuid(void);
 void            exit(int);
 int             fork(void);
 int             shrinkproc(int);
-int             set_pages_readonly(uint64 va, uint64 npages);
-int             set_pages_readwrite(uint64 va, uint64 npages);
+int             set_pages_writeflag(uint64 va, uint64 npages, _Bool is_writable);
 void            proc_mapstacks(pagetable_t);
 pagetable_t     proc_pagetable(struct proc *);
 void            proc_freepagetable(pagetable_t, uint64);
@@ -166,8 +164,7 @@ int             uartgetc(void);
 // vm.c
 enum uvmunmap_free_mode {
   UVMUNMAP_NO_FREE = 0,         // 물리 메모리를 해제하지 않음
-  UVMUNMAP_FREE = 1,            // 일반적인 해제 (decrement_ref 호출)
-  UVMUNMAP_FREE_WITHHELD = 2    // withheld lock을 고려한 해제 (decrement_ref_withheld_lock 호출)
+  UVMUNMAP_FREE = 1             // 일반적인 해제 (decrement_ref 호출)
 };
 
 void            kvminit(void);
