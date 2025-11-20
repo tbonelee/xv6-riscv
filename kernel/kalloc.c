@@ -123,17 +123,6 @@ decrement_ref(void *pa)
     kfree(pa);
 }
 
-struct user_physical_page_ref *
-get_user_physical_page_ref_locked(void *pa)
-{
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
-    panic("get_user_physical_page_ref_locked");
-
-  int idx = PA_TO_INDEX(pa);
-  acquire(&user_physical_page_refs[idx].lock);
-  return &user_physical_page_refs[idx];
-}
-
 // Allocate one 4096-byte page of physical memory.
 // Returns a pointer that the kernel can use.
 // Returns 0 if the memory cannot be allocated.

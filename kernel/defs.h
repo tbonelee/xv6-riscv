@@ -62,8 +62,6 @@ void            kinit(void);
 void            dump_freelist(void);
 void            print_physical_page_refs(void);
 int             count_freelist(void);
-struct user_physical_page_ref *
-                get_user_physical_page_ref_locked(void *pa);
 
 // log.c
 void            initlog(int, struct superblock*);
